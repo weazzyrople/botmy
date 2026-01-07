@@ -21,13 +21,15 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Токены из .env
-BOT_TOKEN = os.getenv('8285134993:AAG2KWUw-UEj7RqAv79PJgopKu1xueR5njU')
-CRYPTO_BOT_TOKEN = os.getenv('512423:AAjvv90onLsaYycj668hryY9Mrkd9wjJoNT')
+# ИСПРАВЛЕНО: Токены правильно загружаются
+BOT_TOKEN = os.getenv('BOT_TOKEN', '8285134993:AAG2KWUw-UEj7RqAv79PJgopKu1xueR5njU')
+CRYPTO_BOT_TOKEN = os.getenv('CRYPTO_BOT_TOKEN', '512423:AAjvv90onLsaYycj668hryY9Mrkd9wjJoNT')
 ADMIN_IDS = [int(x) for x in os.getenv('ADMIN_IDS', '').split(',') if x]
 
+logger.info(f"BOT_TOKEN загружен: {BOT_TOKEN[:20]}...")
+logger.info(f"CRYPTO_BOT_TOKEN загружен: {CRYPTO_BOT_TOKEN[:20]}...")
+
 # Инициализация бота
-BOT_TOKEN = "8285134993:AAG2KWUw-UEj7RqAv79PJgopKu1xueR5njU"
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 storage = MemoryStorage()
@@ -89,54 +91,129 @@ def init_db():
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
 
-    # Таблица пользователей
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT,
-            first_name TEXT,
-            balance REAL DEFAULT 0,
-            total_deposited REAL DEFAULT 0,
-            total_withdrawn REAL DEFAULT 0,
-            total_wagered REAL DEFAULT 0,
-            total_won REAL DEFAULT 0,
-            total_lost REAL DEFAULT 0,
-            games_played INTEGER DEFAULT 0,
-            wins INTEGER DEFAULT 0,
-            losses INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+                   CREATE TABLE IF NOT EXISTS users
+                   (
+                       user_id
+                       INTEGER
+                       PRIMARY
+                       KEY,
+                       username
+                       TEXT,
+                       first_name
+                       TEXT,
+                       balance
+                       REAL
+                       DEFAULT
+                       0,
+                       total_deposited
+                       REAL
+                       DEFAULT
+                       0,
+                       total_withdrawn
+                       REAL
+                       DEFAULT
+                       0,
+                       total_wagered
+                       REAL
+                       DEFAULT
+                       0,
+                       total_won
+                       REAL
+                       DEFAULT
+                       0,
+                       total_lost
+                       REAL
+                       DEFAULT
+                       0,
+                       games_played
+                       INTEGER
+                       DEFAULT
+                       0,
+                       wins
+                       INTEGER
+                       DEFAULT
+                       0,
+                       losses
+                       INTEGER
+                       DEFAULT
+                       0,
+                       created_at
+                       TIMESTAMP
+                       DEFAULT
+                       CURRENT_TIMESTAMP
+                   )
+                   ''')
 
-    # Таблица игр
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS games (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            game_type TEXT,
-            bet_type TEXT,
-            bet_amount REAL,
-            result_value INTEGER,
-            win BOOLEAN,
-            payout REAL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
+                   CREATE TABLE IF NOT EXISTS games
+                   (
+                       id
+                       INTEGER
+                       PRIMARY
+                       KEY
+                       AUTOINCREMENT,
+                       user_id
+                       INTEGER,
+                       game_type
+                       TEXT,
+                       bet_type
+                       TEXT,
+                       bet_amount
+                       REAL,
+                       result_value
+                       INTEGER,
+                       win
+                       BOOLEAN,
+                       payout
+                       REAL,
+                       created_at
+                       TIMESTAMP
+                       DEFAULT
+                       CURRENT_TIMESTAMP,
+                       FOREIGN
+                       KEY
+                   (
+                       user_id
+                   ) REFERENCES users
+                   (
+                       user_id
+                   )
+                       )
+                   ''')
 
-    # Таблица транзакций
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            type TEXT,
-            amount REAL,
-            status TEXT,
-            invoice_id TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
+                   CREATE TABLE IF NOT EXISTS transactions
+                   (
+                       id
+                       INTEGER
+                       PRIMARY
+                       KEY
+                       AUTOINCREMENT,
+                       user_id
+                       INTEGER,
+                       type
+                       TEXT,
+                       amount
+                       REAL,
+                       status
+                       TEXT,
+                       invoice_id
+                       TEXT,
+                       created_at
+                       TIMESTAMP
+                       DEFAULT
+                       CURRENT_TIMESTAMP,
+                       FOREIGN
+                       KEY
+                   (
+                       user_id
+                   ) REFERENCES users
+                   (
+                       user_id
+                   )
+                       )
+                   ''')
 
     conn.commit()
     conn.close()
@@ -156,9 +233,10 @@ def create_user(user_id: int, username: str, first_name: str):
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT OR IGNORE INTO users (user_id, username, first_name)
+                   INSERT
+                   OR IGNORE INTO users (user_id, username, first_name)
         VALUES (?, ?, ?)
-    ''', (user_id, username, first_name))
+                   ''', (user_id, username, first_name))
     conn.commit()
     conn.close()
 
@@ -181,33 +259,31 @@ def record_game(user_id: int, game_type: str, bet_type: str, bet_amount: float,
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
 
-    # Записываем игру
     cursor.execute('''
-        INSERT INTO games (user_id, game_type, bet_type, bet_amount, result_value, win, payout)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (user_id, game_type, bet_type, bet_amount, result_value, win, payout))
+                   INSERT INTO games (user_id, game_type, bet_type, bet_amount, result_value, win, payout)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ''', (user_id, game_type, bet_type, bet_amount, result_value, win, payout))
 
-    # Обновляем статистику пользователя
     if win:
         cursor.execute('''
-            UPDATE users SET 
-                balance = balance + ?,
-                total_wagered = total_wagered + ?,
-                total_won = total_won + ?,
-                games_played = games_played + 1,
-                wins = wins + 1
-            WHERE user_id = ?
-        ''', (payout - bet_amount, bet_amount, payout, user_id))
+                       UPDATE users
+                       SET balance       = balance + ?,
+                           total_wagered = total_wagered + ?,
+                           total_won     = total_won + ?,
+                           games_played  = games_played + 1,
+                           wins          = wins + 1
+                       WHERE user_id = ?
+                       ''', (payout - bet_amount, bet_amount, payout, user_id))
     else:
         cursor.execute('''
-            UPDATE users SET 
-                balance = balance - ?,
-                total_wagered = total_wagered + ?,
-                total_lost = total_lost + ?,
-                games_played = games_played + 1,
-                losses = losses + 1
-            WHERE user_id = ?
-        ''', (bet_amount, bet_amount, bet_amount, user_id))
+                       UPDATE users
+                       SET balance       = balance - ?,
+                           total_wagered = total_wagered + ?,
+                           total_lost    = total_lost + ?,
+                           games_played  = games_played + 1,
+                           losses        = losses + 1
+                       WHERE user_id = ?
+                       ''', (bet_amount, bet_amount, bet_amount, user_id))
 
     conn.commit()
     conn.close()
@@ -294,43 +370,56 @@ def admin_panel_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-# Функции для работы с CryptoBot
+# Функции для работы с CryptoBot - С ЛОГИРОВАНИЕМ
 async def create_invoice(amount: float, description: str):
-    """Создание инвойса через CryptoBot API"""
     import aiohttp
     import ssl
     import certifi
 
+    if not CRYPTO_BOT_TOKEN:
+        logger.error("❌ CRYPTO_BOT_TOKEN не установлен!")
+        return None
+
+    logger.info(f"🔄 Создание инвойса: {amount} USDT")
+
     url = "https://pay.crypt.bot/api/createInvoice"
     headers = {
-        "Crypto-Pay-API-Token": CRYPTO_BOT_TOKEN
+        "Crypto-Pay-API-Token": CRYPTO_BOT_TOKEN,
+        "Content-Type": "application/json"
     }
     data = {
         "asset": "USDT",
         "amount": str(amount),
-        "description": description,
-        "paid_btn_name": "callback",
-        "paid_btn_url": f"https://t.me/{(await bot.get_me()).username}"
+        "description": description
     }
 
-    # Создаем SSL контекст с правильными сертификатами
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    try:
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-    connector = aiohttp.TCPConnector(ssl=ssl_context)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        async with session.post(url, headers=headers, json=data) as resp:
-            if resp.status == 200:
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.post(url, headers=headers, json=data) as resp:
+                logger.info(f"📡 Статус ответа API: {resp.status}")
                 result = await resp.json()
-                if result.get('ok'):
+                logger.info(f"📦 Ответ API: {result}")
+
+                if resp.status == 200 and result.get('ok'):
+                    logger.info(f"✅ Инвойс создан: {result['result']['invoice_id']}")
                     return result['result']
+                else:
+                    logger.error(f"❌ Ошибка создания инвойса: {result}")
+    except Exception as e:
+        logger.error(f"❌ Исключение при создании инвойса: {e}")
+
     return None
 
 
 async def check_invoice(invoice_id: str):
-    """Проверка статуса инвойса"""
     import aiohttp
     import ssl
     import certifi
+
+    logger.info(f"🔍 Проверка инвойса: {invoice_id}")
 
     url = f"https://pay.crypt.bot/api/getInvoices"
     headers = {
@@ -340,22 +429,36 @@ async def check_invoice(invoice_id: str):
         "invoice_ids": invoice_id
     }
 
-    # Создаем SSL контекст с правильными сертификатами
-    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    try:
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
 
-    connector = aiohttp.TCPConnector(ssl=ssl_context)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        async with session.get(url, headers=headers, params=params) as resp:
-            if resp.status == 200:
-                result = await resp.json()
-                if result.get('ok') and result['result']['items']:
-                    return result['result']['items'][0]
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get(url, headers=headers, params=params) as resp:
+                logger.info(f"📡 Статус проверки: {resp.status}")
+
+                if resp.status == 200:
+                    result = await resp.json()
+
+                    if result.get('ok') and result.get('result', {}).get('items'):
+                        invoice = result['result']['items'][0]
+                        logger.info(f"💳 Статус инвойса: {invoice.get('status')}")
+                        return invoice
+                    else:
+                        logger.warning(f"⚠️ Инвойс не найден")
+                else:
+                    error_text = await resp.text()
+                    logger.error(f"❌ Ошибка API ({resp.status}): {error_text}")
+    except Exception as e:
+        logger.error(f"❌ Исключение при проверке: {e}")
+
     return None
 
 
 async def auto_check_payment(message: types.Message, user_id: int, invoice_id: str, state: FSMContext):
-    """Автоматическая проверка оплаты каждые 3 секунды в течение 5 минут"""
-    max_attempts = 100  # 100 * 3 сек = 5 минут
+    logger.info(f"⏳ Запуск автопроверки платежа для инвойса {invoice_id}")
+
+    max_attempts = 100
     attempt = 0
 
     while attempt < max_attempts:
@@ -364,19 +467,18 @@ async def auto_check_payment(message: types.Message, user_id: int, invoice_id: s
 
         invoice = await check_invoice(invoice_id)
 
-        if invoice and invoice['status'] == 'paid':
+        if invoice and invoice.get('status') == 'paid':
+            logger.info(f"✅ Платеж получен!")
             amount = float(invoice['amount'])
 
-            # Начисляем баланс
             update_balance(user_id, amount)
 
-            # Записываем транзакцию
             conn = sqlite3.connect('lottery_bot.db')
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO transactions (user_id, type, amount, status, invoice_id)
-                VALUES (?, 'deposit', ?, 'completed', ?)
-            ''', (user_id, amount, invoice_id))
+                           INSERT INTO transactions (user_id, type, amount, status, invoice_id)
+                           VALUES (?, 'deposit', ?, 'completed', ?)
+                           ''', (user_id, amount, invoice_id))
             cursor.execute(
                 'UPDATE users SET total_deposited = total_deposited + ? WHERE user_id = ?',
                 (amount, user_id)
@@ -384,12 +486,10 @@ async def auto_check_payment(message: types.Message, user_id: int, invoice_id: s
             conn.commit()
             conn.close()
 
-            # Проверяем что это - игра или просто пополнение
             data = await state.get_data()
             is_deposit_only = data.get('is_deposit_only', False)
 
             if is_deposit_only:
-                # Просто пополнение
                 try:
                     await message.edit_text(
                         f"✔️ <b>Оплата получена!</b>\n\n"
@@ -404,7 +504,6 @@ async def auto_check_payment(message: types.Message, user_id: int, invoice_id: s
                     )
                 await state.clear()
             else:
-                # Игра - запускаем СРАЗУ без сообщения
                 game_id = data.get('game_id')
                 bet_type = data.get('bet_type')
                 bet_amount = data.get('bet_amount')
@@ -414,7 +513,7 @@ async def auto_check_payment(message: types.Message, user_id: int, invoice_id: s
 
             return
 
-    # Время вышло
+    logger.warning(f"⏰ Время ожидания оплаты истекло для инвойса {invoice_id}")
     try:
         await message.edit_text(
             "⏰ Время ожидания оплаты истекло.\n"
@@ -450,27 +549,10 @@ async def cmd_start(message: types.Message):
     )
 
 
-@dp.message(Command("admin"))
-async def cmd_admin(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔️ У вас нет доступа к админ-панели!")
-        return
-
-    await message.answer(
-        "<b>⚙️ Админ панель</b>\n\n"
-        "Выберите действие:",
-        reply_markup=admin_panel_keyboard()
-    )
-
-
-# Обработчики кнопок меню
 @dp.message(F.text == "🎮 Играть")
 async def menu_play(message: types.Message, state: FSMContext):
     await state.set_state(BetStates.choosing_game)
-    await message.answer(
-        "<b>🎮 Выбери игру:</b>",
-        reply_markup=games_keyboard()
-    )
+    await message.answer("<b>🎮 Выбери игру:</b>", reply_markup=games_keyboard())
 
 
 @dp.message(F.text == "👤 Мой профиль")
@@ -508,7 +590,8 @@ async def menu_profile(message: types.Message):
 
 
 @dp.message(F.text == "➕ Пополнить")
-async def menu_deposit(message: types.Message):
+async def menu_deposit(message: types.Message, state: FSMContext):
+    await state.clear()
     await message.answer(
         "<b>➕ Пополнение баланса</b>\n\n"
         "Выберите сумму пополнения:",
@@ -519,18 +602,14 @@ async def menu_deposit(message: types.Message):
 @dp.message(F.text == "📊 Статистика")
 async def menu_stats(message: types.Message):
     user_id = message.from_user.id
-
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
-
-    # Последние 10 игр
     cursor.execute('''
-        SELECT game_type, bet_type, bet_amount, win, payout, created_at
-        FROM games
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-        LIMIT 10
-    ''', (user_id,))
+                   SELECT game_type, bet_type, bet_amount, win, payout, created_at
+                   FROM games
+                   WHERE user_id = ?
+                   ORDER BY created_at DESC LIMIT 10
+                   ''', (user_id,))
     recent_games = cursor.fetchall()
     conn.close()
 
@@ -548,28 +627,12 @@ async def menu_stats(message: types.Message):
             f"   Ставка: {bet_amount:.2f} USDT | "
             f"Результат: {profit:+.2f} USDT\n\n"
         )
-
     await message.answer(text)
 
 
-@dp.message(F.text == "⚙️ Админ панель")
-async def menu_admin(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔️ У вас нет доступа к админ-панели!")
-        return
-
-    await message.answer(
-        "<b>⚙️ Админ панель</b>\n\n"
-        "Выберите действие:",
-        reply_markup=admin_panel_keyboard()
-    )
-
-
-# Обработчики callback-запросов
 @dp.callback_query(F.data.startswith("game_"))
 async def callback_choose_game(callback: types.CallbackQuery, state: FSMContext):
     game_id = callback.data.split("_")[1]
-
     await state.update_data(game_id=game_id)
     await state.set_state(BetStates.choosing_bet_type)
 
@@ -577,8 +640,7 @@ async def callback_choose_game(callback: types.CallbackQuery, state: FSMContext)
     game_name = GAMES[game_id]['name']
 
     await callback.message.edit_text(
-        f"<b>{game_emoji} {game_name}</b>\n\n"
-        f"Выбери тип ставки:",
+        f"<b>{game_emoji} {game_name}</b>\n\nВыбери тип ставки:",
         reply_markup=bet_types_keyboard(game_id)
     )
     await callback.answer()
@@ -616,15 +678,9 @@ async def callback_choose_amount(callback: types.CallbackQuery, state: FSMContex
     game_id = data.get('game_id')
     bet_type = data.get('bet_type')
 
-    # Проверяем, что это ставка из игры, а не просто пополнение
     if not game_id or not bet_type:
-        # Это обычное пополнение баланса
         await state.set_state(BetStates.waiting_payment)
-
-        invoice = await create_invoice(
-            amount,
-            f"Пополнение баланса {amount} USDT"
-        )
+        invoice = await create_invoice(amount, f"Пополнение баланса {amount} USDT")
 
         if invoice:
             await state.update_data(
@@ -642,7 +698,6 @@ async def callback_choose_amount(callback: types.CallbackQuery, state: FSMContex
                     [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
                 ])
             )
-            # Запускаем фоновую проверку оплаты
             asyncio.create_task(auto_check_payment(callback.message, user_id, invoice['invoice_id'], state))
         else:
             await callback.message.edit_text("❌ Ошибка создания платежа. Попробуйте позже.")
@@ -651,24 +706,17 @@ async def callback_choose_amount(callback: types.CallbackQuery, state: FSMContex
         await callback.answer()
         return
 
-    # Это ставка в игре
     if balance >= amount:
-        # Сразу играем, если баланс достаточен
         await process_game(callback.message, user_id, game_id, bet_type, amount, state)
         await callback.answer()
     else:
-        # Нужно пополнить
         await state.update_data(bet_amount=amount)
         await state.set_state(BetStates.waiting_payment)
 
         game_emoji = GAMES[game_id]['emoji']
         game_name = GAMES[game_id]['name']
 
-        # Создаем инвойс
-        invoice = await create_invoice(
-            amount,
-            f"Ставка {amount} USDT на {game_emoji} {bet_type}"
-        )
+        invoice = await create_invoice(amount, f"Ставка {amount} USDT на {game_emoji} {bet_type}")
 
         if invoice:
             await state.update_data(invoice_id=invoice['invoice_id'])
@@ -684,7 +732,6 @@ async def callback_choose_amount(callback: types.CallbackQuery, state: FSMContex
                     [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
                 ])
             )
-            # Запускаем фоновую проверку оплаты
             asyncio.create_task(auto_check_payment(callback.message, user_id, invoice['invoice_id'], state))
         else:
             await callback.message.edit_text("❌ Ошибка создания платежа. Попробуйте позже.")
@@ -701,24 +748,28 @@ async def callback_cancel_payment(callback: types.CallbackQuery, state: FSMConte
 
 
 @dp.callback_query(F.data == "back_main")
+@dp.callback_query(F.data == "back_main")
 async def callback_back_main(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     keyboard = admin_keyboard() if callback.from_user.id in ADMIN_IDS else main_keyboard()
     await callback.message.delete()
-    await callback.message.answer(
-        "🏠 Главное меню",
-        reply_markup=keyboard
-    )
+    await callback.message.answer("🏠 Главное меню", reply_markup=keyboard)
+    await callback.answer()
+
+
+
+async def callback_back_main(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    keyboard = admin_keyboard() if callback.from_user.id in ADMIN_IDS else main_keyboard()
+    await callback.message.delete()
+    await callback.message.answer("🏠 Главное меню", reply_markup=keyboard)
     await callback.answer()
 
 
 @dp.callback_query(F.data == "back_games")
 async def callback_back_games(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(BetStates.choosing_game)
-    await callback.message.edit_text(
-        "<b>🎮 Выбери игру:</b>",
-        reply_markup=games_keyboard()
-    )
+    await callback.message.edit_text("<b>🎮 Выбери игру:</b>", reply_markup=games_keyboard())
     await callback.answer()
 
 
@@ -732,13 +783,11 @@ async def callback_back_bettypes(callback: types.CallbackQuery, state: FSMContex
         return
 
     await state.set_state(BetStates.choosing_bet_type)
-
     game_emoji = GAMES[game_id]['emoji']
     game_name = GAMES[game_id]['name']
 
     await callback.message.edit_text(
-        f"<b>{game_emoji} {game_name}</b>\n\n"
-        f"Выбери тип ставки:",
+        f"<b>{game_emoji} {game_name}</b>\n\nВыбери тип ставки:",
         reply_markup=bet_types_keyboard(game_id)
     )
     await callback.answer()
@@ -753,7 +802,6 @@ async def callback_admin_stats(callback: types.CallbackQuery):
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
 
-    # Общая статистика
     cursor.execute('SELECT COUNT(*) FROM users')
     total_users = cursor.fetchone()[0]
 
@@ -801,10 +849,7 @@ async def callback_admin_users(callback: types.CallbackQuery):
     users = get_all_users()
 
     if not users:
-        await callback.message.edit_text(
-            "👥 Пользователи не найдены.",
-            reply_markup=admin_panel_keyboard()
-        )
+        await callback.message.edit_text("👥 Пользователи не найдены.", reply_markup=admin_panel_keyboard())
         await callback.answer()
         return
 
@@ -814,18 +859,21 @@ async def callback_admin_users(callback: types.CallbackQuery):
         username_display = f"@{username}" if username else first_name
         text += f"{i}. {username_display}\n   💰 {balance:.2f} USDT\n\n"
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=admin_panel_keyboard()
-    )
+    await callback.message.edit_text(text, reply_markup=admin_panel_keyboard())
     await callback.answer()
 
 
-# Основная функция игры
-async def process_game(message: types.Message, user_id: int, game_id: str,
-                       bet_type: str, bet_amount: float, state: FSMContext):
-    """Обработка игры"""
+@dp.message(F.text == "⚙️ Админ панель")
+async def menu_admin(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔️ У вас нет доступа к админ-панели!")
+        return
 
+    await message.answer("<b>⚙️ Админ панель</b>\n\nВыберите действие:", reply_markup=admin_panel_keyboard())
+
+
+async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float,
+                       state: FSMContext):
     if game_id not in GAMES:
         await message.answer("❌ Ошибка: неизвестная игра!")
         await state.clear()
@@ -835,23 +883,18 @@ async def process_game(message: types.Message, user_id: int, game_id: str,
     game_name = GAMES[game_id]['name']
     dice_emoji_type = GAMES[game_id]['dice_emoji']
 
-    # Отправляем анимированное эмодзи
     dice_message = await message.answer_dice(emoji=dice_emoji_type)
     result_value = dice_message.dice.value
 
-    # Ждем окончания анимации
     await asyncio.sleep(4)
 
-    # Проверяем результат
     check_func = BET_TYPES[game_id][bet_type]['check']
     win = check_func(result_value)
     odds = BET_TYPES[game_id][bet_type]['odds']
     payout = bet_amount * odds if win else 0
 
-    # Записываем результат
     record_game(user_id, game_emoji, bet_type, bet_amount, result_value, win, payout)
 
-    # Формируем сообщение о результате
     if win:
         profit = payout - bet_amount
         result_text = (
@@ -871,7 +914,6 @@ async def process_game(message: types.Message, user_id: int, game_id: str,
             f"💵 Баланс: {get_balance(user_id):.2f} USDT"
         )
 
-    # Кнопки для продолжения
     buttons = [
         [InlineKeyboardButton(text="🔄 Играть еще", callback_data="back_games")],
         [InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_main")]
@@ -882,12 +924,10 @@ async def process_game(message: types.Message, user_id: int, game_id: str,
     await state.clear()
 
 
-# Запуск бота
 async def main():
     init_db()
     logger.info("База данных инициализирована")
 
-    # Удаляем webhook перед запуском polling
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Webhook удален")
 
