@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Токены из .env
 BOT_TOKEN = os.getenv('8285134993:AAG2KWUw-UEj7RqAv79PJgopKu1xueR5njU')
-CRYPTO_BOT_TOKEN = os.getenv('511408:AAu6yScXl2u1OEtqLgGWnE1fpAM4IOX2lob')
+CRYPTO_BOT_TOKEN = os.getenv('512423:AAjvv90onLsaYycj668hryY9Mrkd9wjJoNT')
 ADMIN_IDS = [int(x) for x in os.getenv('ADMIN_IDS', '').split(',') if x]
 
 # Инициализация бота
