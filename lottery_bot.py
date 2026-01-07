@@ -27,7 +27,9 @@ CRYPTO_BOT_TOKEN = os.getenv('511408:AAu6yScXl2u1OEtqLgGWnE1fpAM4IOX2lob')
 ADMIN_IDS = [int(x) for x in os.getenv('ADMIN_IDS', '').split(',') if x]
 
 # Инициализация бота
+BOT_TOKEN = "8285134993:AAG2KWUw-UEj7RqAv79PJgopKu1xueR5njU"
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
@@ -884,6 +886,11 @@ async def process_game(message: types.Message, user_id: int, game_id: str,
 async def main():
     init_db()
     logger.info("База данных инициализирована")
+
+    # Удаляем webhook перед запуском polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    logger.info("Webhook удален")
+
     logger.info("Бот запущен")
     await dp.start_polling(bot)
 
