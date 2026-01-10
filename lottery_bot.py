@@ -91,12 +91,11 @@ BET_TYPES = {
 # Суммы ставок
 BET_AMOUNTS = [1, 5, 10, 25, 50, 100]
 
-# Суммы Telegram Stars (для пополнения)
-STAR_AMOUNTS = [50, 100, 200, 500, 800, 1000]
+# Суммы Telegram Stars (для пополнения) - в Stars
+STAR_AMOUNTS = [50, 100, 200, 500, 1000, 2500, 5000, 10000]
 
-# Конверсия Stars в USDT (100 Stars = $2 USDT, значит 1 Star = $0.02 USDT)
-STARS_TO_USDT_RATE = 2 / 100  # 0.02 USDT per 1 Star (100 stars = $2 USDT)
-
+# Курс: 100 Stars = 2 USDT, значит 1 Star = 0.02 USDT
+STARS_TO_USDT_RATE = 0.02
 
 # Инициализация БД
 def init_db():
@@ -599,22 +598,24 @@ async def auto_check_payment(message: types.Message, user_id: int, invoice_id: s
 
 # Функции для работы с Telegram Stars
 async def create_stars_invoice(user_id: int, stars_amount: int, title: str, description: str, payload: str):
-    """
-    Creates a Telegram Stars invoice
-    
-    ВАЖНО: Telegram Stars платежи автоматически отправляются на аккаунт владельца бота.
-    Владелец бота - это аккаунт Telegram, который создал бота через @BotFather.
-    Все Stars будут начислены на баланс этого аккаунта автоматически.
-    
-    Args:
-        user_id: ID пользователя, который будет платить
-        stars_amount: количество Stars (100, 200, 400, 500, 800, 1000)
-        title: заголовок инвойса
-        description: описание инвойса
-        payload: уникальный payload для идентификации транзакции
-    """
+    """Создание инвойса Telegram Stars. Курс: 100 Stars = 2 USDT"""
     try:
-        logger.info(f"⭐ Создание инвойса Telegram Stars: {stars_amount} stars")
+        logger.info(f"⭐ Создание Stars инвойса: {stars_amount} Stars для user {user_id}")
+        
+        await bot.send_invoice(
+            chat_id=user_id,
+            title=title,
+            description=description,
+            payload=payload,
+            currency="XTR",
+            prices=[types.LabeledPrice(label="Пополнение", amount=stars_amount)],
+            provider_token=""  # Для Stars пустая строка
+        )
+        logger.info(f"✅ Stars инвойс отправлен")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Ошибка Stars инвойса: {e}")
+        return False
         
         # Send invoice using bot.send_invoice
         # Telegram Stars автоматически начисляются на баланс владельца бота
@@ -1334,13 +1335,10 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
 # Обработчики платежей Telegram Stars
 @dp.pre_checkout_query()
 async def process_pre_checkout_query(pre_checkout_query: types.PreCheckoutQuery):
-    """
-    Обработчик предварительной проверки платежа Telegram Stars
-    """
-    logger.info(f"🔍 Pre-checkout query: {pre_checkout_query.id}, payload: {pre_checkout_query.invoice_payload}")
+    logger.info(f"🔍 Pre-checkout: {pre_checkout_query.invoice_payload}")
     
-    # Проверяем payload и подтверждаем платеж
-    payload = pre_checkout_query.invoice_payload
+    # ВСЕГДА подтверждаем
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
     
     try:
         # Разбираем payload: user_id_stars_amount_purpose_timestamp
