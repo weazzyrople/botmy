@@ -47,6 +47,7 @@ class BetStates(StatesGroup):
     choosing_game = State()
     choosing_bet_type = State()
     choosing_amount = State()
+    entering_custom_amount = State()
     waiting_payment = State()
 
 
@@ -871,7 +872,7 @@ async def callback_choose_bet_type(callback: types.CallbackQuery, state: FSMCont
     bet_type = parts[2]
 
     await state.update_data(bet_type=bet_type)
-    await state.set_state(BetStates.choosing_amount)
+    await state.set_state(BetStates.entering_custom_amount)  # Сразу переходим к вводу суммы
 
     game_emoji = GAMES[game_id]['emoji']
     game_name = GAMES[game_id]['name']
@@ -880,8 +881,8 @@ async def callback_choose_bet_type(callback: types.CallbackQuery, state: FSMCont
     await callback.message.edit_text(
         f"<b>{game_emoji} {game_name}</b>\n"
         f"<b>Ставка:</b> {bet_type} (x{odds})\n\n"
-        f"Выбери сумму ставки:",
-        reply_markup=bet_amounts_keyboard()
+        f"💰 <b>Введите сумму ставки (от 1 USDT):</b>\n\n"
+        f"<i>Примеры: 5 или 10.5 или 25</i>"
     )
     await callback.answer()
 
@@ -890,15 +891,12 @@ async def callback_choose_bet_type(callback: types.CallbackQuery, state: FSMCont
 async def callback_choose_amount(callback: types.CallbackQuery, state: FSMContext):
     amount = float(callback.data.split("_")[1])
     user_id = callback.from_user.id
-    balance = get_balance(user_id)
-
+    
     data = await state.get_data()
-    game_id = data.get('game_id')
-    bet_type = data.get('bet_type')
     is_deposit_only = data.get('is_deposit_only', False)
-
-    if not game_id or not bet_type or is_deposit_only:
-        # Deposit flow - show payment method selection
+    
+    # ТОЛЬКО ДЛЯ ПОПОЛНЕНИЯ БАЛАНСА (кнопки остаются)
+    if is_deposit_only:
         await state.update_data(deposit_amount=amount, is_deposit_only=True)
         await state.set_state(BetStates.waiting_payment)
         
@@ -909,28 +907,9 @@ async def callback_choose_amount(callback: types.CallbackQuery, state: FSMContex
             reply_markup=payment_method_keyboard(amount, "deposit")
         )
         await callback.answer()
-        return
-
-    if balance >= amount:
-        await process_game(callback.message, user_id, game_id, bet_type, amount, state)
-        await callback.answer()
     else:
-        # Need to pay for bet - show payment method selection
-        await state.update_data(bet_amount=amount)
-        await state.set_state(BetStates.waiting_payment)
-
-        game_emoji = GAMES[game_id]['emoji']
-        game_name = GAMES[game_id]['name']
-
-        await callback.message.edit_text(
-            f"<b>💳 Оплата ставки</b>\n\n"
-            f"Сумма: <b>{amount} USDT</b>\n"
-            f"Игра: {game_emoji} {game_name}\n"
-            f"Ставка: {bet_type}\n\n"
-            f"Выберите способ оплаты:",
-            reply_markup=payment_method_keyboard(amount, "bet")
-        )
-        await callback.answer()
+        # Для игры - игнорируем, так как теперь вводим вручную
+        await callback.answer("❌ Используйте ввод суммы текстом", show_alert=True)
 
 
 @dp.callback_query(F.data.startswith("paymethod_"))
@@ -1269,6 +1248,65 @@ async def callback_admin_users(callback: types.CallbackQuery):
 
     await callback.message.edit_text(text, reply_markup=admin_panel_keyboard())
     await callback.answer()
+
+@dp.message(BetStates.entering_custom_amount)
+async def process_custom_amount(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    try:
+        # Преобразуем в число
+        amount = float(message.text.replace(',', '.').strip())
+        
+        # Проверяем минимум
+        if amount < 1:
+            await message.answer("❌ Минимальная сумма - 1 USDT\n\nВведите снова:")
+            return
+        
+        # Проверяем максимум
+        if amount > 10000:
+            await message.answer("❌ Максимальная сумма - 10,000 USDT\n\nВведите снова:")
+            return
+        
+        # Округляем до 2 знаков
+        amount = round(amount, 2)
+        
+        # Получаем данные игры
+        data = await state.get_data()
+        game_id = data.get('game_id')
+        bet_type = data.get('bet_type')
+        balance = get_balance(user_id)
+        
+        if balance >= amount:
+            # Баланса достаточно - играем
+            await process_game(message, user_id, game_id, bet_type, amount, state)
+        else:
+            # Нужно пополнить
+            await state.update_data(bet_amount=amount)
+            await state.set_state(BetStates.waiting_payment)
+            
+            game_emoji = GAMES[game_id]['emoji']
+            game_name = GAMES[game_id]['name']
+            
+            await message.answer(
+                f"<b>💳 Оплата ставки</b>\n\n"
+                f"Сумма: <b>{amount} USDT</b>\n"
+                f"Игра: {game_emoji} {game_name}\n"
+                f"Ставка: {bet_type}\n\n"
+                f"Выберите способ оплаты:",
+                reply_markup=payment_method_keyboard(amount, "bet")
+            )
+    
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат!\n\n"
+            "Введите число. Примеры:\n"
+            "• 5\n"
+            "• 10.5\n"
+            "• 25"
+        )
+```
+
+---
 
 
 @dp.message(F.text == "⚙️ Админ панель")
