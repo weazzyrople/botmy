@@ -895,7 +895,7 @@ async def callback_choose_amount(callback: types.CallbackQuery, state: FSMContex
     data = await state.get_data()
     is_deposit_only = data.get('is_deposit_only', False)
     
-    # ТОЛЬКО ДЛЯ ПОПОЛНЕНИЯ БАЛАНСА (кнопки остаются)
+    # ТОЛЬКО ДЛЯ ПОПОЛНЕНИЯ БАЛАНСА
     if is_deposit_only:
         await state.update_data(deposit_amount=amount, is_deposit_only=True)
         await state.set_state(BetStates.waiting_payment)
@@ -908,9 +908,7 @@ async def callback_choose_amount(callback: types.CallbackQuery, state: FSMContex
         )
         await callback.answer()
     else:
-        # Для игры - игнорируем, так как теперь вводим вручную
         await callback.answer("❌ Используйте ввод суммы текстом", show_alert=True)
-
 
 @dp.callback_query(F.data.startswith("paymethod_"))
 async def callback_choose_payment_method(callback: types.CallbackQuery, state: FSMContext):
