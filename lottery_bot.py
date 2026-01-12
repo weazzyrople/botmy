@@ -1302,7 +1302,7 @@ async def process_custom_amount(message: types.Message, state: FSMContext):
             "• 10.5\n"
             "• 25"
         )
-```
+        
 @dp.message(F.text == "⚙️ Админ панель")
 async def menu_admin(message: types.Message):
     if message.from_user.id not in ADMIN_IDS:
