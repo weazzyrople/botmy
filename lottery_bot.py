@@ -1331,12 +1331,6 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
             "• 500"
         )
 
-### 5. Удалите старые обработчики кнопок Stars
-
-
-## Результат:
-
-Сумма пополнения: 10 USDT
 
 Введите количество Stars (от 50):
 
