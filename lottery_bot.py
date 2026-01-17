@@ -1334,8 +1334,6 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
 ### 5. Удалите старые обработчики кнопок Stars
 
 
----
-
 ## Результат:
 
 **Теперь когда пользователь выбирает "⭐ Telegram Stars":**
