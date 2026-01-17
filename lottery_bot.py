@@ -1449,8 +1449,8 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
 
 ### 5. Удалите старые обработчики кнопок Stars
 
-- `callback_choose_stars_amount`
-- `stars_amounts_keyboard`
+`callback_choose_stars_amount`
+`stars_amounts_keyboard`
 
 ---
 
