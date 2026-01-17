@@ -1447,8 +1447,6 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
             "• 500"
         )
 
----
-
 ### 5. Удалите старые обработчики кнопок Stars
 
 Найдите и **удалите** или **закомментируйте** эти функции:
