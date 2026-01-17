@@ -1446,7 +1446,6 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
             "• 250\n"
             "• 500"
         )
-```
 
 ---
 
