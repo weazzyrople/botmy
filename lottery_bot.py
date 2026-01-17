@@ -47,7 +47,8 @@ class BetStates(StatesGroup):
     choosing_game = State()
     choosing_bet_type = State()
     choosing_amount = State()
-    entering_custom_amount = State()
+    entering_custom_amount = State()  
+    entering_custom_stars = State()
     waiting_payment = State()
 
 
@@ -988,6 +989,56 @@ async def callback_choose_payment_method(callback: types.CallbackQuery, state: F
     
     await callback.answer()
 
+@dp.callback_query(F.data.startswith("paymethod_stars_"))
+async def callback_payment_stars(callback: types.CallbackQuery, state: FSMContext):
+    parts = callback.data.split("_")
+    usdt_amount = float(parts[2])
+    purpose = parts[3]  # 'deposit' or 'bet'
+    
+    user_id = callback.from_user.id
+    
+    await state.update_data(
+        payment_method="stars",
+        required_usdt_amount=usdt_amount,
+        payment_purpose=purpose
+    )
+    await state.set_state(BetStates.entering_custom_stars)
+    
+    if purpose == "deposit":
+        min_stars = 50
+        await callback.message.edit_text(
+            f"<b>⭐ Telegram Stars</b>\n\n"
+            f"Сумма пополнения: <b>{usdt_amount} USDT</b>\n\n"
+            f"💫 <b>Введите количество Stars (от {min_stars}):</b>\n\n"
+            f"<b>Курс:</b> 50 Stars = 1 USDT\n\n"
+            f"<i>Примеры:\n"
+            f"• 50 Stars = 1 USDT\n"
+            f"• 100 Stars = 2 USDT\n"
+            f"• 250 Stars = 5 USDT\n"
+            f"• 500 Stars = 10 USDT</i>"
+        )
+    else:
+        min_stars = int(usdt_amount / STARS_TO_USDT_RATE)
+        if min_stars < 50:
+            min_stars = 50
+        
+        data = await state.get_data()
+        game_id = data.get('game_id')
+        bet_type = data.get('bet_type')
+        game_emoji = GAMES[game_id]['emoji'] if game_id else "🎮"
+        game_name = GAMES[game_id]['name'] if game_id else "Игра"
+        
+        await callback.message.edit_text(
+            f"<b>⭐ Telegram Stars</b>\n\n"
+            f"Игра: {game_emoji} {game_name}\n"
+            f"Ставка: {bet_type}\n"
+            f"Нужно: <b>{usdt_amount} USDT</b>\n\n"
+            f"💫 <b>Введите количество Stars (минимум {min_stars}):</b>\n\n"
+            f"<b>Курс:</b> 50 Stars = 1 USDT\n\n"
+            f"<i>Например: {min_stars} или {min_stars + 50} Stars</i>"
+        )
+    
+    await callback.answer()
 
 @dp.callback_query(F.data.startswith("stars_amount_"))
 async def callback_choose_stars_amount(callback: types.CallbackQuery, state: FSMContext):
@@ -1302,6 +1353,128 @@ async def process_custom_amount(message: types.Message, state: FSMContext):
             "• 10.5\n"
             "• 25"
         )
+
+@dp.message(BetStates.entering_custom_stars)
+async def process_custom_stars(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    try:
+        # Преобразуем в целое число Stars
+        stars_amount = int(message.text.strip())
+        
+        # Проверяем минимум
+        if stars_amount < 50:
+            await message.answer("❌ Минимум 50 Stars\n\nВведите снова:")
+            return
+        
+        # Проверяем что кратно 50 (опционально, можно убрать)
+        # if stars_amount % 50 != 0:
+        #     await message.answer("❌ Сумма должна быть кратна 50 Stars\n\nВведите снова:")
+        #     return
+        
+        # Проверяем максимум
+        if stars_amount > 500000:
+            await message.answer("❌ Максимум 500,000 Stars\n\nВведите снова:")
+            return
+        
+        # Конвертируем в USDT
+        amount_usdt = stars_amount * STARS_TO_USDT_RATE
+        amount_usdt = round(amount_usdt, 2)
+        
+        # Получаем данные
+        data = await state.get_data()
+        purpose = data.get('payment_purpose', 'deposit')
+        required_amount = data.get('required_usdt_amount', 0)
+        
+        # Для ставки проверяем что хватает
+        if purpose == "bet" and amount_usdt < required_amount:
+            shortage = required_amount - amount_usdt
+            min_stars_needed = int(required_amount / STARS_TO_USDT_RATE)
+            await message.answer(
+                f"❌ Недостаточно!\n\n"
+                f"Вы ввели: {stars_amount} Stars ({amount_usdt} USDT)\n"
+                f"Нужно минимум: {min_stars_needed} Stars ({required_amount} USDT)\n"
+                f"Не хватает: {shortage} USDT\n\n"
+                f"Введите больше Stars:"
+            )
+            return
+        
+        # Создаем payload
+        payload = f"{user_id}_{stars_amount}_{purpose}_{datetime.now().timestamp()}"
+        
+        await state.update_data(
+            stars_payload=payload,
+            stars_amount=stars_amount,
+            stars_amount_usdt=amount_usdt
+        )
+        
+        # Создаем инвойс
+        if purpose == "deposit":
+            title = "Пополнение баланса"
+            description = f"Пополнение {amount_usdt} USDT ({stars_amount} Stars)"
+        else:
+            game_id = data.get('game_id')
+            bet_type = data.get('bet_type')
+            game_emoji = GAMES[game_id]['emoji'] if game_id else "🎮"
+            game_name = GAMES[game_id]['name'] if game_id else "Игра"
+            title = f"Ставка {game_emoji}"
+            description = f"Ставка {amount_usdt} USDT на {game_name} - {bet_type}"
+        
+        success = await create_stars_invoice(user_id, stars_amount, title, description, payload)
+        
+        if success:
+            await message.answer(
+                f"<b>⭐ Telegram Stars</b>\n\n"
+                f"Сумма: <b>{stars_amount} Stars</b> ({amount_usdt} USDT)\n\n"
+                f"Проверьте Telegram для оплаты.\n"
+                f"После оплаты {'баланс будет зачислен' if purpose == 'deposit' else 'игра запустится'} автоматически! 🎮",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
+                ])
+            )
+        else:
+            await message.answer("❌ Ошибка создания платежа Stars. Попробуйте позже.")
+            await state.clear()
+    
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат!\n\n"
+            "Введите целое число Stars.\n\n"
+            "Примеры:\n"
+            "• 50\n"
+            "• 100\n"
+            "• 250\n"
+            "• 500"
+        )
+```
+
+---
+
+### 5. Удалите старые обработчики кнопок Stars
+
+Найдите и **удалите** или **закомментируйте** эти функции:
+- `callback_choose_stars_amount`
+- `stars_amounts_keyboard`
+
+---
+
+## Результат:
+
+**Теперь когда пользователь выбирает "⭐ Telegram Stars":**
+```
+⭐ Telegram Stars
+
+Сумма пополнения: 10 USDT
+
+💫 Введите количество Stars (от 50):
+
+Курс: 50 Stars = 1 USDT
+
+Примеры:
+- 50 Stars = 1 USDT
+- 100 Stars = 2 USDT
+- 250 Stars = 5 USDT
+- 500 Stars = 10 USDT
         
 @dp.message(F.text == "⚙️ Админ панель")
 async def menu_admin(message: types.Message):
@@ -1427,6 +1600,234 @@ async def process_successful_payment(message: types.Message, state: FSMContext):
     except Exception as e:
         logger.error(f"❌ Ошибка обработки успешного платежа: {e}")
         await message.answer("❌ Ошибка обработки платежа. Обратитесь к администратору.")
+
+# ============= АДМИНСКИЕ КОМАНДЫ =============
+
+@dp.message(Command("balance"))
+async def cmd_check_balance(message: types.Message):
+    """Проверить баланс игрока: /balance <user_id>"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔️ У вас нет доступа к этой команде!")
+        return
+    
+    # Парсим команду
+    parts = message.text.split()
+    if len(parts) != 2:
+        await message.answer(
+            "❌ Неверный формат!\n\n"
+            "<b>Использование:</b>\n"
+            "<code>/balance USER_ID</code>\n\n"
+            "Пример: <code>/balance 123456789</code>"
+        )
+        return
+    
+    try:
+        target_user_id = int(parts[1])
+    except ValueError:
+        await message.answer("❌ USER_ID должен быть числом!")
+        return
+    
+    # Получаем данные пользователя
+    user = get_user(target_user_id)
+    
+    if not user:
+        await message.answer(f"❌ Пользователь с ID {target_user_id} не найден!")
+        return
+    
+    # Распаковываем данные
+    user_id, username, first_name, balance, total_deposited, total_withdrawn, total_wagered, total_won, total_lost, games_played, wins, losses, created_at = user
+    
+    win_rate = (wins / games_played * 100) if games_played > 0 else 0
+    profit = total_won - total_lost
+    
+    await message.answer(
+        f"<b>👤 Информация о пользователе</b>\n\n"
+        f"🆔 ID: <code>{user_id}</code>\n"
+        f"👤 Имя: {first_name}\n"
+        f"📱 Username: @{username if username else 'нет'}\n\n"
+        f"💰 <b>Баланс: {balance:.2f} USDT</b>\n\n"
+        f"📊 Всего депозитов: {total_deposited:.2f} USDT\n"
+        f"📤 Всего выводов: {total_withdrawn:.2f} USDT\n"
+        f"🎮 Всего ставок: {total_wagered:.2f} USDT\n"
+        f"✔️ Выиграно: {total_won:.2f} USDT\n"
+        f"✖️ Проиграно: {total_lost:.2f} USDT\n"
+        f"💵 Профит: {profit:+.2f} USDT\n\n"
+        f"🎲 Игр сыграно: {games_played}\n"
+        f"✔️ Побед: {wins}\n"
+        f"✖️ Поражений: {losses}\n"
+        f"📈 Винрейт: {win_rate:.1f}%\n\n"
+        f"📅 Регистрация: {created_at}"
+    )
+
+
+@dp.message(Command("reset"))
+async def cmd_reset_balance(message: types.Message):
+    """Обнулить баланс игрока: /reset <user_id>"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔️ У вас нет доступа к этой команде!")
+        return
+    
+    parts = message.text.split()
+    if len(parts) != 2:
+        await message.answer(
+            "❌ Неверный формат!\n\n"
+            "<b>Использование:</b>\n"
+            "<code>/reset USER_ID</code>\n\n"
+            "Пример: <code>/reset 123456789</code>"
+        )
+        return
+    
+    try:
+        target_user_id = int(parts[1])
+    except ValueError:
+        await message.answer("❌ USER_ID должен быть числом!")
+        return
+    
+    user = get_user(target_user_id)
+    
+    if not user:
+        await message.answer(f"❌ Пользователь с ID {target_user_id} не найден!")
+        return
+    
+    old_balance = user[3]
+    username = user[1]
+    first_name = user[2]
+    
+    # Обнуляем баланс
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET balance = 0 WHERE user_id = ?', (target_user_id,))
+    conn.commit()
+    conn.close()
+    
+    logger.info(f"⚠️ Админ {message.from_user.id} обнулил баланс пользователя {target_user_id} ({old_balance} → 0 USDT)")
+    
+    await message.answer(
+        f"✅ <b>Баланс обнулен!</b>\n\n"
+        f"👤 Пользователь: {first_name} (@{username if username else 'нет'})\n"
+        f"🆔 ID: <code>{target_user_id}</code>\n\n"
+        f"💰 Старый баланс: {old_balance:.2f} USDT\n"
+        f"💰 Новый баланс: 0.00 USDT"
+    )
+
+
+@dp.message(Command("setbalance"))
+async def cmd_set_balance(message: types.Message):
+    """Установить баланс игрока: /setbalance <user_id> <amount>"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔️ У вас нет доступа к этой команде!")
+        return
+    
+    parts = message.text.split()
+    if len(parts) != 3:
+        await message.answer(
+            "❌ Неверный формат!\n\n"
+            "<b>Использование:</b>\n"
+            "<code>/setbalance USER_ID AMOUNT</code>\n\n"
+            "Примеры:\n"
+            "<code>/setbalance 123456789 100</code>\n"
+            "<code>/setbalance 123456789 50.5</code>"
+        )
+        return
+    
+    try:
+        target_user_id = int(parts[1])
+        new_balance = float(parts[2])
+    except ValueError:
+        await message.answer("❌ Неверный формат! USER_ID и AMOUNT должны быть числами!")
+        return
+    
+    if new_balance < 0:
+        await message.answer("❌ Баланс не может быть отрицательным!")
+        return
+    
+    if new_balance > 1000000:
+        await message.answer("❌ Максимальный баланс - 1,000,000 USDT!")
+        return
+    
+    user = get_user(target_user_id)
+    
+    if not user:
+        await message.answer(f"❌ Пользователь с ID {target_user_id} не найден!")
+        return
+    
+    old_balance = user[3]
+    username = user[1]
+    first_name = user[2]
+    
+    # Устанавливаем новый баланс
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET balance = ? WHERE user_id = ?', (new_balance, target_user_id))
+    conn.commit()
+    conn.close()
+    
+    logger.info(f"⚠️ Админ {message.from_user.id} изменил баланс пользователя {target_user_id} ({old_balance} → {new_balance} USDT)")
+    
+    await message.answer(
+        f"✅ <b>Баланс изменен!</b>\n\n"
+        f"👤 Пользователь: {first_name} (@{username if username else 'нет'})\n"
+        f"🆔 ID: <code>{target_user_id}</code>\n\n"
+        f"💰 Старый баланс: {old_balance:.2f} USDT\n"
+        f"💰 Новый баланс: {new_balance:.2f} USDT\n\n"
+        f"Изменение: {new_balance - old_balance:+.2f} USDT"
+    )
+
+
+@dp.message(Command("adminhelp"))
+async def cmd_admin_help(message: types.Message):
+    """Список админских команд"""
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔️ У вас нет доступа к этой команде!")
+        return
+    
+    await message.answer(
+        "<b>⚙️ Админские команды</b>\n\n"
+        "<b>Управление балансами:</b>\n"
+        "<code>/balance USER_ID</code> - проверить баланс игрока\n"
+        "<code>/reset USER_ID</code> - обнулить баланс\n"
+        "<code>/setbalance USER_ID AMOUNT</code> - установить баланс\n\n"
+        "<b>Примеры:</b>\n"
+        "<code>/balance 123456789</code>\n"
+        "<code>/reset 123456789</code>\n"
+        "<code>/setbalance 123456789 100</code>\n\n"
+        "<b>Другие команды:</b>\n"
+        "/admin - админ панель\n"
+        "/adminhelp - эта справка"
+    )
+```
+
+---
+
+## Как использовать:
+
+### 1. **Проверить баланс игрока:**
+```
+/balance 123456789
+```
+Покажет полную информацию о пользователе.
+
+---
+
+### 2. **Обнулить баланс:**
+```
+/reset 123456789
+```
+Установит баланс в 0.
+
+---
+
+### 3. **Установить баланс:**
+```
+/setbalance 123456789 100
+```
+Установит баланс 100 USDT.
+
+---
+
+### 4. **Справка по командам:**
+```
+/adminhelp
 
 
 async def main():
