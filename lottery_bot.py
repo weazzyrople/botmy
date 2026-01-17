@@ -1462,7 +1462,6 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
 
 **Теперь когда пользователь выбирает "⭐ Telegram Stars":**
 ```
-⭐ Telegram Stars
 
 Сумма пополнения: 10 USDT
 
