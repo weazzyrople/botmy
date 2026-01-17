@@ -1465,7 +1465,7 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
 
 Сумма пополнения: 10 USDT
 
-💫 Введите количество Stars (от 50):
+Введите количество Stars (от 50):
 
 Курс: 50 Stars = 1 USDT
 
