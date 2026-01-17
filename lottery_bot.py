@@ -400,41 +400,6 @@ def payment_method_keyboard(amount: float, purpose: str = "deposit"):
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
-def stars_amounts_keyboard(purpose: str = "deposit", required_usdt: float = None):
-    """
-    Creates keyboard for selecting Telegram Stars amount
-    purpose: 'deposit' or 'bet'
-    required_usdt: required USDT amount for bet payment (if purpose is 'bet')
-    """
-    buttons = []
-    row = []
-    
-    for i, stars_amount in enumerate(STAR_AMOUNTS):
-        amount_usdt = stars_amount * STARS_TO_USDT_RATE
-        
-        # For bet payment, show if this amount is sufficient
-        if purpose == "bet" and required_usdt:
-            if amount_usdt >= required_usdt:
-                text = f"{stars_amount} ⭐\n({amount_usdt:.2f} USDT) ✓"
-            else:
-                text = f"{stars_amount} ⭐\n({amount_usdt:.2f} USDT)"
-        else:
-            text = f"{stars_amount} ⭐\n(${amount_usdt:.2f})"
-        
-        row.append(InlineKeyboardButton(
-            text=text,
-            callback_data=f"stars_amount_{stars_amount}_{purpose}"
-        ))
-        if (i + 1) % 2 == 0:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_payment_method")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
 def admin_panel_keyboard():
     buttons = [
         [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")],
@@ -1040,87 +1005,6 @@ async def callback_payment_stars(callback: types.CallbackQuery, state: FSMContex
     
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("stars_amount_"))
-async def callback_choose_stars_amount(callback: types.CallbackQuery, state: FSMContext):
-    parts = callback.data.split("_")
-    stars_amount = int(parts[2])
-    purpose = parts[3]  # 'deposit' or 'bet'
-    
-    user_id = callback.from_user.id
-    amount_usdt = stars_amount * STARS_TO_USDT_RATE
-    
-    # Check if amount is sufficient for bet payment
-    if purpose == "bet":
-        data = await state.get_data()
-        required_amount = data.get('bet_amount') or data.get('required_usdt_amount', 0)
-        if amount_usdt < required_amount:
-            await callback.answer(
-                f"❌ Недостаточно Stars! Нужно минимум {int(required_amount / STARS_TO_USDT_RATE)} Stars ({required_amount:.2f} USDT)",
-                show_alert=True
-            )
-            return
-    
-    # Create payload for invoice
-    payload = f"{user_id}_{stars_amount}_{purpose}_{datetime.now().timestamp()}"
-    
-    await state.update_data(
-        stars_payload=payload,
-        stars_amount=stars_amount,
-        payment_purpose=purpose,
-        stars_amount_usdt=amount_usdt
-    )
-    
-    if purpose == "deposit":
-        description = f"Пополнение баланса ${amount_usdt:.2f} ({stars_amount} Stars)"
-        title = "Пополнение баланса"
-    else:
-        data = await state.get_data()
-        game_id = data.get('game_id')
-        bet_type = data.get('bet_type')
-        bet_amount = data.get('bet_amount')
-        game_emoji = GAMES[game_id]['emoji'] if game_id else "🎮"
-        game_name = GAMES[game_id]['name'] if game_id else "Игра"
-        title = f"Ставка {game_emoji} {bet_type}"
-        description = f"Ставка ${bet_amount:.2f} на {game_emoji} {game_name} - {bet_type} ({stars_amount} Stars)"
-    
-    success = await create_stars_invoice(user_id, stars_amount, title, description, payload)
-    
-    if success:
-        if purpose == "deposit":
-            text = (
-                f"<b>⭐ Telegram Stars</b>\n\n"
-                f"Сумма: <b>{stars_amount} Stars</b> (${amount_usdt:.2f})\n\n"
-                f"Проверьте свой Telegram для оплаты.\n"
-                f"После оплаты баланс будет автоматически зачислен."
-            )
-        else:
-            data = await state.get_data()
-            game_id = data.get('game_id')
-            bet_type = data.get('bet_type')
-            game_emoji = GAMES[game_id]['emoji'] if game_id else "🎮"
-            game_name = GAMES[game_id]['name'] if game_id else "Игра"
-            
-            text = (
-                f"<b>⭐ Telegram Stars</b>\n\n"
-                f"Сумма: <b>{stars_amount} Stars</b> (${amount_usdt:.2f})\n"
-                f"Игра: {game_emoji} {game_name}\n"
-                f"Ставка: {bet_type}\n\n"
-                f"Проверьте свой Telegram для оплаты.\n"
-                f"После оплаты игра запустится автоматически! 🎮"
-            )
-        
-        await callback.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
-            ])
-        )
-    else:
-        await callback.message.edit_text("❌ Ошибка создания платежа Telegram Stars. Попробуйте позже.")
-        await state.clear()
-    
-    await callback.answer()
-
 
 @dp.callback_query(F.data == "back_payment_method")
 async def callback_back_payment_method(callback: types.CallbackQuery, state: FSMContext):
@@ -1449,8 +1333,6 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
 
 ### 5. Удалите старые обработчики кнопок Stars
 
-`callback_choose_stars_amount`
-`stars_amounts_keyboard`
 
 ---
 
