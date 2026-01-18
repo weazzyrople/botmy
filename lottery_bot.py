@@ -1331,12 +1331,6 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
             "• 500"
         )
 
-
-- 50 Stars = 1 USDT
-- 100 Stars = 2 USDT
-- 250 Stars = 5 USDT
-- 500 Stars = 10 USDT
-        
 @dp.message(F.text == "⚙️ Админ панель")
 async def menu_admin(message: types.Message):
     if message.from_user.id not in ADMIN_IDS:
