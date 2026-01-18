@@ -1333,8 +1333,6 @@ async def process_custom_stars(message: types.Message, state: FSMContext):
 
 
 
-Курс: 50 Stars = 1 USDT
-
 Примеры:
 - 50 Stars = 1 USDT
 - 100 Stars = 2 USDT
