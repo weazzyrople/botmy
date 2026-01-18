@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ИСПРАВЛЕНО: Токены правильно загружаются
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8285134993:8509674494:AAE3NZ_WP_Ha8z0EvRRnFQKunrskioQWorU')
+BOT_TOKEN = os.getenv('BOT_TOKEN', '8509674494:AAE3NZ_WP_Ha8z0EvRRnFQKunrskioQWorU')
 CRYPTO_BOT_TOKEN = os.getenv('CRYPTO_BOT_TOKEN', '512423:AAjvv90onLsaYycj668hryY9Mrkd9wjJoNT')
 ADMIN_IDS = [int(x) for x in os.getenv('ADMIN_IDS', '').split(',') if x]
 
