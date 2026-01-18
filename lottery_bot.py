@@ -1650,9 +1650,6 @@ async def cmd_admin_help(message: types.Message):
         "/admin - админ панель\n"
         "/adminhelp - эта справка"
     )
-```
-
----
 
 ## Как использовать:
 
