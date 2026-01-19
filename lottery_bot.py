@@ -47,9 +47,11 @@ class BetStates(StatesGroup):
     choosing_game = State()
     choosing_bet_type = State()
     choosing_amount = State()
-    entering_custom_amount = State()  
+    entering_custom_amount = State()
     entering_custom_stars = State()
     waiting_payment = State()
+    admin_entering_user_id = State()  
+    admin_entering_balance = State()  
 
 
 # Константы игр
@@ -404,6 +406,7 @@ def admin_panel_keyboard():
     buttons = [
         [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin_users")],
+        [InlineKeyboardButton(text="💰 Управление балансами", callback_data="admin_balances")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -1160,235 +1163,278 @@ async def callback_admin_stats(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data == "admin_users")
-async def callback_admin_users(callback: types.CallbackQuery):
+# ============= АДМИНСКИЕ КОМАНДЫ С КНОПКАМИ =============
+
+@dp.callback_query(F.data == "admin_balances")
+async def callback_admin_balances(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("⛔️ Доступ запрещен!", show_alert=True)
         return
-
-    users = get_all_users()
-
-    if not users:
-        await callback.message.edit_text("👥 Пользователи не найдены.", reply_markup=admin_panel_keyboard())
-        await callback.answer()
-        return
-
-    text = "<b>👥 Топ-10 пользователей по балансу:</b>\n\n"
-    for i, user in enumerate(users[:10], 1):
-        user_id, username, first_name, balance = user[0], user[1], user[2], user[3]
-        username_display = f"@{username}" if username else first_name
-        text += f"{i}. {username_display}\n   💰 {balance:.2f} USDT\n\n"
-
-    await callback.message.edit_text(text, reply_markup=admin_panel_keyboard())
+    
+    await callback.message.edit_text(
+        "<b>💰 Управление балансами</b>\n\n"
+        "Выберите действие:",
+        reply_markup=admin_balance_keyboard()
+    )
     await callback.answer()
 
-@dp.message(BetStates.entering_custom_amount)
-async def process_custom_amount(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    
-    try:
-        # Преобразуем в число
-        amount = float(message.text.replace(',', '.').strip())
-        
-        # Проверяем минимум
-        if amount < 1:
-            await message.answer("❌ Минимальная сумма - 1 USDT\n\nВведите снова:")
-            return
-        
-        # Проверяем максимум
-        if amount > 10000:
-            await message.answer("❌ Максимальная сумма - 10,000 USDT\n\nВведите снова:")
-            return
-        
-        # Округляем до 2 знаков
-        amount = round(amount, 2)
-        
-        # Получаем данные игры
-        data = await state.get_data()
-        game_id = data.get('game_id')
-        bet_type = data.get('bet_type')
-        balance = get_balance(user_id)
-        
-        if balance >= amount:
-            # Баланса достаточно - играем
-            await process_game(message, user_id, game_id, bet_type, amount, state)
-        else:
-            # Нужно пополнить
-            await state.update_data(bet_amount=amount)
-            await state.set_state(BetStates.waiting_payment)
-            
-            game_emoji = GAMES[game_id]['emoji']
-            game_name = GAMES[game_id]['name']
-            
-            await message.answer(
-                f"<b>💳 Оплата ставки</b>\n\n"
-                f"Сумма: <b>{amount} USDT</b>\n"
-                f"Игра: {game_emoji} {game_name}\n"
-                f"Ставка: {bet_type}\n\n"
-                f"Выберите способ оплаты:",
-                reply_markup=payment_method_keyboard(amount, "bet")
-            )
-    
-    except ValueError:
-        await message.answer(
-            "❌ Неверный формат!\n\n"
-            "Введите число. Примеры:\n"
-            "• 5\n"
-            "• 10.5\n"
-            "• 25"
-        )
 
-@dp.message(BetStates.entering_custom_stars)
-async def process_custom_stars(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    
-    try:
-        # Преобразуем в целое число Stars
-        stars_amount = int(message.text.strip())
-        
-        # Проверяем минимум
-        if stars_amount < 50:
-            await message.answer("❌ Минимум 50 Stars\n\nВведите снова:")
-            return
-        
-        # Проверяем что кратно 50 (опционально, можно убрать)
-        # if stars_amount % 50 != 0:
-        #     await message.answer("❌ Сумма должна быть кратна 50 Stars\n\nВведите снова:")
-        #     return
-        
-        # Проверяем максимум
-        if stars_amount > 500000:
-            await message.answer("❌ Максимум 500,000 Stars\n\nВведите снова:")
-            return
-        
-        # Конвертируем в USDT
-        amount_usdt = stars_amount * STARS_TO_USDT_RATE
-        amount_usdt = round(amount_usdt, 2)
-        
-        # Получаем данные
-        data = await state.get_data()
-        purpose = data.get('payment_purpose', 'deposit')
-        required_amount = data.get('required_usdt_amount', 0)
-        
-        # Для ставки проверяем что хватает
-        if purpose == "bet" and amount_usdt < required_amount:
-            shortage = required_amount - amount_usdt
-            min_stars_needed = int(required_amount / STARS_TO_USDT_RATE)
-            await message.answer(
-                f"❌ Недостаточно!\n\n"
-                f"Вы ввели: {stars_amount} Stars ({amount_usdt} USDT)\n"
-                f"Нужно минимум: {min_stars_needed} Stars ({required_amount} USDT)\n"
-                f"Не хватает: {shortage} USDT\n\n"
-                f"Введите больше Stars:"
-            )
-            return
-        
-        # Создаем payload
-        payload = f"{user_id}_{stars_amount}_{purpose}_{datetime.now().timestamp()}"
-        
-        await state.update_data(
-            stars_payload=payload,
-            stars_amount=stars_amount,
-            stars_amount_usdt=amount_usdt
-        )
-        
-        # Создаем инвойс
-        if purpose == "deposit":
-            title = "Пополнение баланса"
-            description = f"Пополнение {amount_usdt} USDT ({stars_amount} Stars)"
-        else:
-            game_id = data.get('game_id')
-            bet_type = data.get('bet_type')
-            game_emoji = GAMES[game_id]['emoji'] if game_id else "🎮"
-            game_name = GAMES[game_id]['name'] if game_id else "Игра"
-            title = f"Ставка {game_emoji}"
-            description = f"Ставка {amount_usdt} USDT на {game_name} - {bet_type}"
-        
-        success = await create_stars_invoice(user_id, stars_amount, title, description, payload)
-        
-        if success:
-            await message.answer(
-                f"<b>⭐ Telegram Stars</b>\n\n"
-                f"Сумма: <b>{stars_amount} Stars</b> ({amount_usdt} USDT)\n\n"
-                f"Проверьте Telegram для оплаты.\n"
-                f"После оплаты {'баланс будет зачислен' if purpose == 'deposit' else 'игра запустится'} автоматически! 🎮",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
-                ])
-            )
-        else:
-            await message.answer("❌ Ошибка создания платежа Stars. Попробуйте позже.")
-            await state.clear()
-    
-    except ValueError:
-        await message.answer(
-            "❌ Неверный формат!\n\n"
-            "Введите целое число Stars.\n\n"
-            "Примеры:\n"
-            "• 50\n"
-            "• 100\n"
-            "• 250\n"
-            "• 500"
-        )
-
-@dp.message(F.text == "⚙️ Админ панель")
-async def menu_admin(message: types.Message):
-    if message.from_user.id not in ADMIN_IDS:
-        await message.answer("⛔️ У вас нет доступа к админ-панели!")
+@dp.callback_query(F.data == "back_admin_panel")
+async def callback_back_admin_panel(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Доступ запрещен!", show_alert=True)
         return
+    
+    await callback.message.edit_text(
+        "<b>⚙️ Админ панель</b>\n\n"
+        "Выберите действие:",
+        reply_markup=admin_panel_keyboard()
+    )
+    await callback.answer()
 
-    await message.answer("<b>⚙️ Админ панель</b>\n\nВыберите действие:", reply_markup=admin_panel_keyboard())
+
+@dp.callback_query(F.data == "admin_check_balance")
+async def callback_admin_check_balance(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Доступ запрещен!", show_alert=True)
+        return
+    
+    await state.update_data(admin_action="check_balance")
+    await state.set_state(BetStates.admin_entering_user_id)
+    
+    await callback.message.edit_text(
+        "<b>🔍 Проверка баланса</b>\n\n"
+        "Введите ID пользователя:\n\n"
+        "<i>Пользователь может узнать свой ID командой /myid</i>"
+    )
+    await callback.answer()
 
 
-async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float,
-                       state: FSMContext):
-    if game_id not in GAMES:
-        await message.answer("❌ Ошибка: неизвестная игра!")
+@dp.callback_query(F.data == "admin_reset_balance")
+async def callback_admin_reset_balance(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Доступ запрещен!", show_alert=True)
+        return
+    
+    await state.update_data(admin_action="reset_balance")
+    await state.set_state(BetStates.admin_entering_user_id)
+    
+    await callback.message.edit_text(
+        "<b>0️⃣ Обнуление баланса</b>\n\n"
+        "Введите ID пользователя:\n\n"
+        "<i>⚠️ Внимание! Баланс будет обнулен без возможности восстановления!</i>"
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_set_balance")
+async def callback_admin_set_balance(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Доступ запрещен!", show_alert=True)
+        return
+    
+    await state.update_data(admin_action="set_balance")
+    await state.set_state(BetStates.admin_entering_user_id)
+    
+    await callback.message.edit_text(
+        "<b>💰 Установка баланса</b>\n\n"
+        "Введите ID пользователя:"
+    )
+    await callback.answer()
+
+
+# Обработчик ввода User ID для админских действий
+@dp.message(BetStates.admin_entering_user_id)
+async def process_admin_user_id(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔️ У вас нет доступа!")
         await state.clear()
         return
-
-    game_emoji = GAMES[game_id]['emoji']
-    game_name = GAMES[game_id]['name']
-    dice_emoji_type = GAMES[game_id]['dice_emoji']
-
-    dice_message = await message.answer_dice(emoji=dice_emoji_type)
-    result_value = dice_message.dice.value
-
-    await asyncio.sleep(4)
-
-    check_func = BET_TYPES[game_id][bet_type]['check']
-    win = check_func(result_value)
-    odds = BET_TYPES[game_id][bet_type]['odds']
-    payout = bet_amount * odds if win else 0
-
-    record_game(user_id, game_emoji, bet_type, bet_amount, result_value, win, payout)
-
-    if win:
-        profit = payout - bet_amount
-        result_text = (
-            f"✔️ <b>ПОБЕДА!</b> ✔️\n\n"
-            f"{game_emoji} Выпало: <b>{result_value}</b>\n"
-            f"Твоя ставка: {bet_type}\n"
-            f"Коэффициент: x{odds}\n\n"
-            f"💰 Выигрыш: <b>+{profit:.2f} USDT</b>\n"
-            f"💵 Баланс: {get_balance(user_id):.2f} USDT"
+    
+    try:
+        target_user_id = int(message.text.strip())
+    except ValueError:
+        await message.answer("❌ ID должен быть числом! Попробуйте еще раз:")
+        return
+    
+    user = get_user(target_user_id)
+    
+    if not user:
+        await message.answer(
+            f"❌ Пользователь с ID <code>{target_user_id}</code> не найден!\n\n"
+            f"Попробуйте другой ID:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✖️ Отменить", callback_data="admin_balances")]
+            ])
         )
-    else:
-        result_text = (
-            f"✖️ <b>ПРОИГРЫШ</b> ✖️\n\n"
-            f"{game_emoji} Выпало: <b>{result_value}</b>\n"
-            f"Твоя ставка: {bet_type}\n\n"
-            f"💸 Потеря: <b>-{bet_amount:.2f} USDT</b>\n"
-            f"💵 Баланс: {get_balance(user_id):.2f} USDT"
+        return
+    
+    data = await state.get_data()
+    action = data.get('admin_action')
+    
+    user_id, username, first_name, balance, total_deposited, total_withdrawn, total_wagered, total_won, total_lost, games_played, wins, losses, created_at = user
+    
+    if action == "check_balance":
+        # Показываем баланс
+        win_rate = (wins / games_played * 100) if games_played > 0 else 0
+        profit = total_won - total_lost
+        
+        await message.answer(
+            f"<b>👤 Информация о пользователе</b>\n\n"
+            f"🆔 ID: <code>{user_id}</code>\n"
+            f"👤 Имя: {first_name}\n"
+            f"📱 Username: @{username if username else 'нет'}\n\n"
+            f"💰 <b>Баланс: {balance:.2f} USDT</b>\n\n"
+            f"📊 Депозиты: {total_deposited:.2f} USDT\n"
+            f"🎮 Ставок: {total_wagered:.2f} USDT\n"
+            f"✔️ Выиграно: {total_won:.2f} USDT\n"
+            f"✖️ Проиграно: {total_lost:.2f} USDT\n"
+            f"💵 Профит: {profit:+.2f} USDT\n\n"
+            f"🎲 Игр: {games_played}\n"
+            f"✔️ Побед: {wins}\n"
+            f"✖️ Поражений: {losses}\n"
+            f"📈 Винрейт: {win_rate:.1f}%",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Админ панель", callback_data="admin_balances")]
+            ])
+        )
+        await state.clear()
+    
+    elif action == "reset_balance":
+        # Подтверждение обнуления
+        await state.update_data(target_user_id=target_user_id)
+        
+        await message.answer(
+            f"<b>⚠️ Подтверждение обнуления баланса</b>\n\n"
+            f"👤 Пользователь: {first_name} (@{username if username else 'нет'})\n"
+            f"🆔 ID: <code>{user_id}</code>\n"
+            f"💰 Текущий баланс: <b>{balance:.2f} USDT</b>\n\n"
+            f"❗️ Баланс будет обнулен!\n\n"
+            f"Вы уверены?",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Да, обнулить", callback_data="confirm_reset")],
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_balances")]
+            ])
+        )
+    
+    elif action == "set_balance":
+        # Запрашиваем новую сумму
+        await state.update_data(
+            target_user_id=target_user_id,
+            old_balance=balance,
+            user_name=first_name,
+            user_username=username
+        )
+        await state.set_state(BetStates.admin_entering_balance)
+        
+        await message.answer(
+            f"<b>💰 Установка баланса</b>\n\n"
+            f"👤 Пользователь: {first_name} (@{username if username else 'нет'})\n"
+            f"💰 Текущий баланс: {balance:.2f} USDT\n\n"
+            f"Введите новую сумму баланса (в USDT):",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✖️ Отменить", callback_data="admin_balances")]
+            ])
         )
 
-    buttons = [
-        [InlineKeyboardButton(text="🔄 Играть еще", callback_data="back_games")],
-        [InlineKeyboardButton(text="🔙 Главное меню", callback_data="back_main")]
-    ]
-    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
-    await message.answer(result_text, reply_markup=keyboard)
+@dp.callback_query(F.data == "confirm_reset")
+async def callback_confirm_reset(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Доступ запрещен!", show_alert=True)
+        return
+    
+    data = await state.get_data()
+    target_user_id = data.get('target_user_id')
+    
+    if not target_user_id:
+        await callback.answer("❌ Ошибка! Попробуйте снова.", show_alert=True)
+        await state.clear()
+        return
+    
+    user = get_user(target_user_id)
+    if not user:
+        await callback.answer("❌ Пользователь не найден!", show_alert=True)
+        await state.clear()
+        return
+    
+    old_balance = user[3]
+    username = user[1]
+    first_name = user[2]
+    
+    # Обнуляем баланс
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET balance = 0 WHERE user_id = ?', (target_user_id,))
+    conn.commit()
+    conn.close()
+    
+    logger.info(f"⚠️ Админ {callback.from_user.id} обнулил баланс пользователя {target_user_id} ({old_balance} → 0 USDT)")
+    
+    await callback.message.edit_text(
+        f"✅ <b>Баланс обнулен!</b>\n\n"
+        f"👤 Пользователь: {first_name} (@{username if username else 'нет'})\n"
+        f"🆔 ID: <code>{target_user_id}</code>\n\n"
+        f"💰 Было: {old_balance:.2f} USDT\n"
+        f"💰 Стало: 0.00 USDT",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Админ панель", callback_data="admin_balances")]
+        ])
+    )
+    await callback.answer("✅ Баланс обнулен!")
+    await state.clear()
+
+
+# Обработчик ввода новой суммы баланса
+@dp.message(BetStates.admin_entering_balance)
+async def process_admin_new_balance(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("⛔️ У вас нет доступа!")
+        await state.clear()
+        return
+    
+    try:
+        new_balance = float(message.text.replace(',', '.').strip())
+    except ValueError:
+        await message.answer("❌ Неверный формат! Введите число:")
+        return
+    
+    if new_balance < 0:
+        await message.answer("❌ Баланс не может быть отрицательным! Попробуйте еще раз:")
+        return
+    
+    if new_balance > 1000000:
+        await message.answer("❌ Максимум 1,000,000 USDT! Попробуйте еще раз:")
+        return
+    
+    new_balance = round(new_balance, 2)
+    
+    data = await state.get_data()
+    target_user_id = data.get('target_user_id')
+    old_balance = data.get('old_balance', 0)
+    user_name = data.get('user_name', 'Пользователь')
+    user_username = data.get('user_username')
+    
+    # Устанавливаем новый баланс
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('UPDATE users SET balance = ? WHERE user_id = ?', (new_balance, target_user_id))
+    conn.commit()
+    conn.close()
+    
+    logger.info(f"⚠️ Админ {message.from_user.id} изменил баланс пользователя {target_user_id} ({old_balance} → {new_balance} USDT)")
+    
+    await message.answer(
+        f"✅ <b>Баланс изменен!</b>\n\n"
+        f"👤 Пользователь: {user_name} (@{user_username if user_username else 'нет'})\n"
+        f"🆔 ID: <code>{target_user_id}</code>\n\n"
+        f"💰 Было: {old_balance:.2f} USDT\n"
+        f"💰 Стало: {new_balance:.2f} USDT\n\n"
+        f"Изменение: {new_balance - old_balance:+.2f} USDT",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Админ панель", callback_data="admin_balances")]
+        ])
+    )
     await state.clear()
 
 
@@ -1650,33 +1696,6 @@ async def cmd_admin_help(message: types.Message):
         "/admin - админ панель\n"
         "/adminhelp - эта справка"
     )
-
-## Как использовать:
-
-### 1. **Проверить баланс игрока:**
-
-/balance 123456789
-
-Покажет полную информацию о пользователе.
-
-
-### 2. **Обнулить баланс:**
-
-/reset 123456789
-
-Установит баланс в 0.
-
-
-### 3. **Установить баланс:**
-
-/setbalance 123456789 100
-
-Установит баланс 100 USDT.
-
-
-### 4. **Справка по командам:**
-
-/adminhelp
 
 
 async def main():
