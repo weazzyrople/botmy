@@ -1162,9 +1162,6 @@ async def callback_admin_stats(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-
-# ============= АДМИНСКИЕ КОМАНДЫ С КНОПКАМИ =============
-
 @dp.callback_query(F.data == "admin_balances")
 async def callback_admin_balances(callback: types.CallbackQuery):
     if callback.from_user.id not in ADMIN_IDS:
