@@ -793,7 +793,7 @@ async def menu_stats(message: types.Message):
     cursor.execute('''
         SELECT game_type, bet_type, bet_amount, win, payout, created_at
         FROM games WHERE user_id = ? ORDER BY created_at DESC LIMIT 10
-    ''', (user_id,))
+  , (user_id,))
     recent_games = cursor.fetchall()
     conn.close()
 
