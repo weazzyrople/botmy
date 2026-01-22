@@ -1291,7 +1291,7 @@ async def process_admin_user_id(message: types.Message, state: FSMContext):
                 f"ID: <code>{target_user_id}</code>\n"
                 f"💰 Новый баланс: 0.00 USDT"
             )
-            elif action == "add":
+        elif action == "add":
             await state.set_state(BetStates.admin_entering_balance)
             await message.answer(
                 f"<b>➕ Добавление баланса</b>\n\n"
@@ -1339,7 +1339,7 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
                 f"ID: <code>{target_user_id}</code>\n"
                 f"💰 Новый баланс: {amount:.2f} USDT"
             )
-        elif action == "add":
+       elif action == "add":
             new_balance = current_balance + amount
             set_balance(target_user_id, new_balance)
             await message.answer(
