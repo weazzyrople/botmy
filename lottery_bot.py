@@ -87,8 +87,8 @@ BET_TYPES = {
 def init_db():
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
-cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users ('''
+cursor.execute(
+        CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             first_name TEXT,
