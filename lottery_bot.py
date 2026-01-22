@@ -1339,7 +1339,7 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
                 f"ID: <code>{target_user_id}</code>\n"
                 f"💰 Новый баланс: {amount:.2f} USDT"
             )
-       elif action == "add":
+        elif action == "add":
             new_balance = current_balance + amount
             set_balance(target_user_id, new_balance)
             await message.answer(
