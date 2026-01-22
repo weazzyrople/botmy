@@ -89,7 +89,7 @@ def init_db():
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
 
-    cursor.execute('''
+cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
@@ -107,7 +107,7 @@ def init_db():
         )
     ''')
 
-    cursor.execute('''
+cursor.execute('''
         CREATE TABLE IF NOT EXISTS games (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -122,7 +122,7 @@ def init_db():
         )
     ''')
 
-    cursor.execute('''
+cursor.execute('''
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -154,8 +154,8 @@ cursor.execute('''
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
-    conn.commit()
-    conn.close()
+conn.commit()
+conn.close()
 
 
 def get_user(user_id: int):
