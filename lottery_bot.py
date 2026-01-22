@@ -144,7 +144,7 @@ cursor.execute('''
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    cursor.execute('''
+cursor.execute('''
         CREATE TABLE IF NOT EXISTS promocode_uses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
