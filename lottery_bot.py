@@ -33,7 +33,6 @@ dp = Dispatcher(storage=storage)
 # Курс: 50 Stars = 1 USDT
 STARS_TO_USDT_RATE = 1 / 50  # = 0.02
 
-
 class BetStates(StatesGroup):
     choosing_game = State()
     choosing_bet_type = State()
@@ -88,9 +87,8 @@ BET_TYPES = {
 def init_db():
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
-
 cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE IF NOT EXISTS users ('''
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             first_name TEXT,
