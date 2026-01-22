@@ -42,6 +42,10 @@ class BetStates(StatesGroup):
     waiting_payment = State()
     admin_entering_user_id = State()
     admin_entering_balance = State()
+    entering_promocode = State()
+    admin_creating_promo_code = State()
+    admin_creating_promo_amount = State()
+    admin_creating_promo_uses = State()
 
 
 GAMES = {
@@ -130,7 +134,26 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
-
+cursor.execute('''
+        CREATE TABLE IF NOT EXISTS promocodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE,
+            amount REAL,
+            max_uses INTEGER,
+            current_uses INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS promocode_uses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            code TEXT,
+            amount REAL,
+            used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -225,24 +248,107 @@ def get_all_users():
     users = cursor.fetchall()
     conn.close()
     return users
+    
+def create_promocode(code: str, amount: float, max_uses: int):
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            INSERT INTO promocodes (code, amount, max_uses)
+            VALUES (?, ?, ?)
+        ''', (code, amount, max_uses))
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False
 
+
+def get_promocode(code: str):
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM promocodes WHERE code = ?', (code,))
+    promo = cursor.fetchone()
+    conn.close()
+    return promo
+
+
+def use_promocode(user_id: int, code: str):
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    
+
+    cursor.execute('SELECT * FROM promocode_uses WHERE user_id = ? AND code = ?', (user_id, code))
+    if cursor.fetchone():
+        conn.close()
+        return False, "Вы уже использовали этот промокод!"
+    
+    
+    cursor.execute('SELECT * FROM promocodes WHERE code = ?', (code,))
+    promo = cursor.fetchone()
+    
+    if not promo:
+        conn.close()
+        return False, "Промокод не найден!"
+    
+    promo_id, promo_code, amount, max_uses, current_uses, created_at = promo
+    
+    if current_uses >= max_uses:
+        conn.close()
+        return False, "Промокод исчерпан!"
+    
+ 
+    cursor.execute('UPDATE promocodes SET current_uses = current_uses + 1 WHERE code = ?', (code,))
+    cursor.execute('''
+        INSERT INTO promocode_uses (user_id, code, amount)
+        VALUES (?, ?, ?)
+    ''', (user_id, code, amount))
+    
+    update_balance(user_id, amount)
+    
+    cursor.execute('''
+        INSERT INTO transactions (user_id, type, amount, status, invoice_id)
+        VALUES (?, 'promocode', ?, 'completed', ?)
+    ''', (user_id, amount, f"promo_{code}"))
+    
+    conn.commit()
+    conn.close()
+    return True, amount
+
+
+def get_all_promocodes():
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM promocodes ORDER BY created_at DESC')
+    promos = cursor.fetchall()
+    conn.close()
+    return promos
+
+
+def delete_promocode(code: str):
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM promocodes WHERE code = ?', (code,))
+    conn.commit()
+    conn.close()
 
 def main_keyboard():
     keyboard = [
         [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
-        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="🎁 Промокод")],
+        [KeyboardButton(text="📊 Статистика")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
-
 
 def admin_keyboard():
     keyboard = [
         [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
-        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="🎁 Промокод")],
+        [KeyboardButton(text="📊 Статистика")],
         [KeyboardButton(text="⚙️ Админ панель")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
-
 
 def games_keyboard():
     buttons = []
@@ -280,10 +386,10 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin_users")],
         [InlineKeyboardButton(text="💰 Управление балансами", callback_data="admin_balances")],
+        [InlineKeyboardButton(text="🎁 Управление промокодами", callback_data="admin_promocodes")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
 
 def admin_balance_keyboard():
     buttons = [
@@ -294,7 +400,15 @@ def admin_balance_keyboard():
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
+    
+def admin_promocode_keyboard():
+    buttons = [
+        [InlineKeyboardButton(text="➕ Создать промокод", callback_data="admin_create_promo")],
+        [InlineKeyboardButton(text="📋 Список промокодов", callback_data="admin_list_promos")],
+        [InlineKeyboardButton(text="🗑 Удалить промокод", callback_data="admin_delete_promo")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 async def create_invoice(amount: float, description: str):
     import aiohttp
@@ -664,7 +778,14 @@ async def menu_deposit(message: types.Message, state: FSMContext):
         "💰 <b>Введите сумму пополнения (от 1 USDT):</b>\n\n"
         "<i>Примеры: 1 или 5 или 10 или 25</i>"
     )
-
+    
+@dp.message(F.text == "🎁 Промокод")
+async def menu_promocode(message: types.Message, state: FSMContext):
+    await state.set_state(BetStates.entering_promocode)
+    await message.answer(
+        "<b>🎁 Активация промокода</b>\n\n"
+        "Введите промокод:"
+    )
 
 @dp.message(F.text == "📊 Статистика")
 async def menu_stats(message: types.Message):
@@ -807,7 +928,25 @@ async def process_custom_amount(message: types.Message, state: FSMContext):
                 )
     except ValueError:
         await message.answer("❌ Неверный формат! Введите число, например: 5 или 10.5")
-
+        
+@dp.message(BetStates.entering_promocode)
+async def process_promocode(message: types.Message, state: FSMContext):
+    code = message.text.strip().upper()
+    user_id = message.from_user.id
+    
+    success, result = use_promocode(user_id, code)
+    
+    if success:
+        await message.answer(
+            f"✅ <b>Промокод активирован!</b>\n\n"
+            f"🎁 Код: <code>{code}</code>\n"
+            f"💰 Начислено: <b>{result} USDT</b>\n"
+            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
+        )
+    else:
+        await message.answer(f"❌ <b>Ошибка!</b>\n\n{result}")
+    
+    await state.clear()
 
 @dp.callback_query(F.data.startswith("pay_stars_"))
 async def process_stars_payment(callback: types.CallbackQuery, state: FSMContext):
@@ -949,6 +1088,116 @@ async def admin_balances(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+@dp.callback_query(F.data == "admin_promocodes")
+async def admin_promocodes(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "<b>🎁 Управление промокодами</b>\n\n"
+        "Выберите действие:",
+        reply_markup=admin_promocode_keyboard()
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_create_promo")
+async def admin_create_promo(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    await state.set_state(BetStates.admin_creating_promo_code)
+    await callback.message.edit_text(
+        "<b>➕ Создание промокода</b>\n\n"
+        "Введите код промокода (например: BONUS100):"
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_list_promos")
+async def admin_list_promos(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    promos = get_all_promocodes()
+    
+    if not promos:
+        await callback.message.edit_text(
+            "<b>📋 Список промокодов</b>\n\n"
+            "Промокодов пока нет.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_promocodes")]
+            ])
+        )
+        await callback.answer()
+        return
+    
+    text = "<b>📋 Активные промокоды:</b>\n\n"
+    for promo in promos:
+        promo_id, code, amount, max_uses, current_uses, created_at = promo
+        text += (
+            f"🎁 <code>{code}</code>\n"
+            f"   💰 Сумма: {amount} USDT\n"
+            f"   📊 Использовано: {current_uses}/{max_uses}\n\n"
+        )
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_promocodes")]
+        ])
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "admin_delete_promo")
+async def admin_delete_promo(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    promos = get_all_promocodes()
+    
+    if not promos:
+        await callback.answer("Промокодов нет!", show_alert=True)
+        return
+    
+    buttons = []
+    for promo in promos:
+        code = promo[1]
+        buttons.append([InlineKeyboardButton(
+            text=f"🗑 {code}",
+            callback_data=f"delete_promo_{code}"
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_promocodes")])
+    
+    await callback.message.edit_text(
+        "<b>🗑 Удаление промокода</b>\n\n"
+        "Выберите промокод для удаления:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("delete_promo_"))
+async def confirm_delete_promo(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    code = callback.data.replace("delete_promo_", "")
+    delete_promocode(code)
+    
+    await callback.message.edit_text(
+        f"✅ <b>Промокод удален!</b>\n\n"
+        f"🗑 Код: <code>{code}</code>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_promocodes")]
+        ])
+    )
+    await callback.answer()
 
 @dp.callback_query(F.data == "admin_add_balance")
 async def admin_add_balance(callback: types.CallbackQuery, state: FSMContext):
@@ -1112,6 +1361,84 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("❌ Неверный формат суммы! Введите число.")
+
+@dp.message(BetStates.admin_creating_promo_code)
+async def process_promo_code(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    
+    code = message.text.strip().upper()
+    
+    if len(code) < 3:
+        await message.answer("❌ Код должен быть минимум 3 символа!")
+        return
+    
+    await state.update_data(promo_code=code)
+    await state.set_state(BetStates.admin_creating_promo_amount)
+    await message.answer(
+        f"<b>➕ Создание промокода</b>\n\n"
+        f"🎁 Код: <code>{code}</code>\n\n"
+        f"Введите сумму начисления (USDT):"
+    )
+
+
+@dp.message(BetStates.admin_creating_promo_amount)
+async def process_promo_amount(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    
+    try:
+        amount = float(message.text.replace(',', '.'))
+        if amount <= 0:
+            await message.answer("❌ Сумма должна быть больше 0!")
+            return
+        
+        await state.update_data(promo_amount=amount)
+        await state.set_state(BetStates.admin_creating_promo_uses)
+        
+        data = await state.get_data()
+        code = data.get('promo_code')
+        
+        await message.answer(
+            f"<b>➕ Создание промокода</b>\n\n"
+            f"🎁 Код: <code>{code}</code>\n"
+            f"💰 Сумма: {amount} USDT\n\n"
+            f"Введите максимальное количество активаций:"
+        )
+    except ValueError:
+        await message.answer("❌ Неверный формат суммы! Введите число.")
+
+
+@dp.message(BetStates.admin_creating_promo_uses)
+async def process_promo_uses(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    
+    try:
+        max_uses = int(message.text)
+        if max_uses <= 0:
+            await message.answer("❌ Количество должно быть больше 0!")
+            return
+        
+        data = await state.get_data()
+        code = data.get('promo_code')
+        amount = data.get('promo_amount')
+        
+        success = create_promocode(code, amount, max_uses)
+        
+        if success:
+            await message.answer(
+                f"✅ <b>Промокод создан!</b>\n\n"
+                f"🎁 Код: <code>{code}</code>\n"
+                f"💰 Сумма: {amount} USDT\n"
+                f"📊 Активаций: 0/{max_uses}"
+            )
+        else:
+            await message.answer(f"❌ Промокод <code>{code}</code> уже существует!")
+        
+        await state.clear()
+    except ValueError:
+        await message.answer("❌ Неверный формат! Введите целое число.")
 
 async def main():
     init_db()
