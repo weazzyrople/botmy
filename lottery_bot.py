@@ -54,29 +54,29 @@ GAMES = {
 
 BET_TYPES = {
     'dice': {
-        'Четное': {'odds': 2.2, 'check': lambda x: x in [2, 4, 6]},
-        'Нечетное': {'odds': 2.2, 'check': lambda x: x in [1, 3, 5]},
-        'Больше 3': {'odds': 2.2, 'check': lambda x: x > 3},
-        'Меньше 4': {'odds': 2.2, 'check': lambda x: x < 4},
+        'Четное': {'odds': 2.0, 'check': lambda x: x in [2, 4, 6]},
+        'Нечетное': {'odds': 2.0, 'check': lambda x: x in [1, 3, 5]},
+        'Больше 3': {'odds': 2.0, 'check': lambda x: x > 3},
+        'Меньше 4': {'odds': 2.0, 'check': lambda x: x < 4},
     },
     'basketball': {
-        'Гол': {'odds': 3.5, 'check': lambda x: x in [4, 5]},
-        'Застрял': {'odds': 6.0, 'check': lambda x: x == 3},
+        'Гол': {'odds': 2.0, 'check': lambda x: x in [4, 5]},
+        'Застрял': {'odds': 2.0, 'check': lambda x: x == 3},
         'Мимо': {'odds': 2.0, 'check': lambda x: x in [1, 2]},
     },
     'football': {
-        'Гол': {'odds': 3.5, 'check': lambda x: x in [3, 4, 5]},
-        'Мимо': {'odds': 1.8, 'check': lambda x: x in [1, 2]},
+        'Гол': {'odds': 2.0, 'check': lambda x: x in [3, 4, 5]},
+        'Мимо': {'odds': 2.0, 'check': lambda x: x in [1, 2]},
     },
     'darts': {
-        'Центр': {'odds': 6.0, 'check': lambda x: x == 6},
-        'Красное': {'odds': 4.0, 'check': lambda x: x == 5},
-        'Белое': {'odds': 3.0, 'check': lambda x: x in [3, 4]},
+        'Центр': {'odds': 2.0, 'check': lambda x: x == 6},
+        'Красное': {'odds': 2.0, 'check': lambda x: x == 5},
+        'Белое': {'odds': 2.0, 'check': lambda x: x in [3, 4]},
         'Мимо': {'odds': 2.0, 'check': lambda x: x in [1, 2]},
     },
     'bowling': {
-        'Страйк': {'odds': 5.5, 'check': lambda x: x == 6},
-        'Мимо': {'odds': 1.5, 'check': lambda x: x in [1, 2, 3]},
+        'Страйк': {'odds': 2.0, 'check': lambda x: x == 6},
+        'Мимо': {'odds': 2.0, 'check': lambda x: x in [1, 2, 3]},
     }
 }
 
@@ -266,22 +266,6 @@ def bet_types_keyboard(game_id: str):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def bet_amount_keyboard(game_id: str, bet_type: str):
-    buttons = [
-        [
-            InlineKeyboardButton(text="1 USDT", callback_data=f"betamount_{game_id}_{bet_type}_1"),
-            InlineKeyboardButton(text="5 USDT", callback_data=f"betamount_{game_id}_{bet_type}_5")
-        ],
-        [
-            InlineKeyboardButton(text="10 USDT", callback_data=f"betamount_{game_id}_{bet_type}_10"),
-            InlineKeyboardButton(text="25 USDT", callback_data=f"betamount_{game_id}_{bet_type}_25")
-        ],
-        [InlineKeyboardButton(text="💰 Своя сумма", callback_data=f"betamount_{game_id}_{bet_type}_custom")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data=f"game_{game_id}")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
 def payment_method_keyboard(amount: float, purpose: str):
     buttons = [
         [InlineKeyboardButton(text="⭐ Telegram Stars", callback_data=f"pay_stars_{amount}_{purpose}")],
@@ -304,7 +288,8 @@ def admin_panel_keyboard():
 def admin_balance_keyboard():
     buttons = [
         [InlineKeyboardButton(text="🔍 Проверить баланс", callback_data="admin_check_balance")],
-        [InlineKeyboardButton(text="0️⃣ Обнулить баланс", callback_data="admin_reset_balance")],
+        [InlineKeyboardButton(text="➕ Добавить баланс", callback_data="admin_add_balance")],
+        [InlineKeyboardButton(text="➖ Вычесть баланс", callback_data="admin_subtract_balance")],
         [InlineKeyboardButton(text="💰 Установить баланс", callback_data="admin_set_balance")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
     ]
@@ -782,50 +767,6 @@ async def select_bet_type(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("betamount_"))
-async def select_bet_amount(callback: types.CallbackQuery, state: FSMContext):
-    parts = callback.data.split("_")
-    game_id = parts[1]
-    bet_type = parts[2]
-    amount_str = parts[3]
-    
-    if amount_str == "custom":
-        await state.set_state(BetStates.entering_custom_amount)
-        await callback.message.edit_text(
-            "<b>💰 Введите свою сумму ставки (от 1 USDT):</b>\n\n"
-            "<i>Примеры: 1 или 5 или 10.5 или 25</i>"
-        )
-        await callback.answer()
-        return
-    
-    bet_amount = float(amount_str)
-    user_id = callback.from_user.id
-    balance = get_balance(user_id)
-    
-    if balance >= bet_amount:
-        await state.update_data(bet_amount=bet_amount)
-        await process_game(callback.message, user_id, game_id, bet_type, bet_amount, state)
-        await callback.answer()
-    else:
-        need_amount = bet_amount - balance
-        await state.update_data(
-            game_id=game_id,
-            bet_type=bet_type,
-            bet_amount=bet_amount,
-            is_deposit_only=False
-        )
-        
-        await callback.message.edit_text(
-            f"💰 <b>Недостаточно средств!</b>\n\n"
-            f"Ваш баланс: <b>{balance:.2f} USDT</b>\n"
-            f"Нужно: <b>{bet_amount:.2f} USDT</b>\n"
-            f"Не хватает: <b>{need_amount:.2f} USDT</b>\n\n"
-            f"Выберите способ пополнения:",
-            reply_markup=payment_method_keyboard(need_amount, "bet")
-        )
-        await callback.answer()
-
-
 @dp.message(BetStates.entering_custom_amount)
 async def process_custom_amount(message: types.Message, state: FSMContext):
     try:
@@ -1009,20 +950,34 @@ async def admin_balances(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data == "admin_check_balance")
-async def admin_check_balance(callback: types.CallbackQuery, state: FSMContext):
+@dp.callback_query(F.data == "admin_add_balance")
+async def admin_add_balance(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("⛔️ Нет доступа!", show_alert=True)
         return
     
     await state.set_state(BetStates.admin_entering_user_id)
-    await state.update_data(action="check")
+    await state.update_data(action="add")
     await callback.message.edit_text(
-        "<b>🔍 Проверка баланса</b>\n\n"
+        "<b>➕ Добавление баланса</b>\n\n"
         "Введите Telegram ID пользователя:"
     )
     await callback.answer()
 
+
+@dp.callback_query(F.data == "admin_subtract_balance")
+async def admin_subtract_balance(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    await state.set_state(BetStates.admin_entering_user_id)
+    await state.update_data(action="subtract")
+    await callback.message.edit_text(
+        "<b>➖ Вычитание баланса</b>\n\n"
+        "Введите Telegram ID пользователя:"
+    )
+    await callback.answer()
 
 @dp.callback_query(F.data == "admin_reset_balance")
 async def admin_reset_balance(callback: types.CallbackQuery, state: FSMContext):
@@ -1087,6 +1042,22 @@ async def process_admin_user_id(message: types.Message, state: FSMContext):
                 f"ID: <code>{target_user_id}</code>\n"
                 f"💰 Новый баланс: 0.00 USDT"
             )
+            elif action == "add":
+            await state.set_state(BetStates.admin_entering_balance)
+            await message.answer(
+                f"<b>➕ Добавление баланса</b>\n\n"
+                f"ID: <code>{target_user_id}</code>\n"
+                f"💰 Текущий баланс: {get_balance(target_user_id):.2f} USDT\n\n"
+                f"Введите сумму для добавления:"
+            )
+        elif action == "subtract":
+            await state.set_state(BetStates.admin_entering_balance)
+            await message.answer(
+                f"<b>➖ Вычитание баланса</b>\n\n"
+                f"ID: <code>{target_user_id}</code>\n"
+                f"💰 Текущий баланс: {get_balance(target_user_id):.2f} USDT\n\n"
+                f"Введите сумму для вычитания:"
+            )
             await state.clear()
         elif action == "set":
             await state.set_state(BetStates.admin_entering_balance)
@@ -1105,20 +1076,42 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
         return
     
     try:
-        new_balance = float(message.text.replace(',', '.'))
+        amount = float(message.text.replace(',', '.'))
         data = await state.get_data()
         target_user_id = data.get('target_user_id')
+        action = data.get('action')
         
-        set_balance(target_user_id, new_balance)
-        await message.answer(
-            f"<b>✅ Баланс установлен</b>\n\n"
-            f"ID: <code>{target_user_id}</code>\n"
-            f"💰 Новый баланс: {new_balance:.2f} USDT"
-        )
+        current_balance = get_balance(target_user_id)
+        
+        if action == "set":
+            set_balance(target_user_id, amount)
+            await message.answer(
+                f"<b>✅ Баланс установлен</b>\n\n"
+                f"ID: <code>{target_user_id}</code>\n"
+                f"💰 Новый баланс: {amount:.2f} USDT"
+            )
+        elif action == "add":
+            new_balance = current_balance + amount
+            set_balance(target_user_id, new_balance)
+            await message.answer(
+                f"<b>✅ Баланс добавлен</b>\n\n"
+                f"ID: <code>{target_user_id}</code>\n"
+                f"➕ Добавлено: {amount:.2f} USDT\n"
+                f"💰 Новый баланс: {new_balance:.2f} USDT"
+            )
+        elif action == "subtract":
+            new_balance = current_balance - amount
+            set_balance(target_user_id, new_balance)
+            await message.answer(
+                f"<b>✅ Баланс вычтен</b>\n\n"
+                f"ID: <code>{target_user_id}</code>\n"
+                f"➖ Вычтено: {amount:.2f} USDT\n"
+                f"💰 Новый баланс: {new_balance:.2f} USDT"
+            )
+        
         await state.clear()
     except ValueError:
         await message.answer("❌ Неверный формат суммы! Введите число.")
-
 
 async def main():
     init_db()
