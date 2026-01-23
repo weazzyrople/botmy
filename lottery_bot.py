@@ -45,6 +45,7 @@ class BetStates(StatesGroup):
     admin_creating_promo_code = State()
     admin_creating_promo_amount = State()
     admin_creating_promo_uses = State()
+    admin_broadcast = State()
 
 
 GAMES = {
@@ -390,10 +391,11 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin_users")],
         [InlineKeyboardButton(text="💰 Управление балансами", callback_data="admin_balances")],
         [InlineKeyboardButton(text="🎁 Управление промокодами", callback_data="admin_promocodes")],
+        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],  # ← ДОБАВЬ ЭТО
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
+    
 def admin_balance_keyboard():
     buttons = [
         [InlineKeyboardButton(text="🔍 Проверить баланс", callback_data="admin_check_balance")],
@@ -1448,6 +1450,90 @@ async def process_promo_uses(message: types.Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("❌ Неверный формат! Введите целое число.")
+
+@dp.callback_query(F.data == "admin_broadcast")
+async def admin_broadcast(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    await state.set_state(BetStates.admin_broadcast)
+    await callback.message.edit_text(
+        "<b>📢 Рассылка сообщения</b>\n\n"
+        "Отправьте сообщение которое хотите разослать всем пользователям.\n\n"
+        "Можно отправить:\n"
+        "• Текст\n"
+        "• Фото с текстом\n"
+        "• Видео с текстом\n\n"
+        "Отправьте /cancel для отмены"
+    )
+    await callback.answer()
+
+
+@dp.message(BetStates.admin_broadcast)
+async def process_broadcast(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    
+    if message.text == "/cancel":
+        await message.answer("❌ Рассылка отменена")
+        await state.clear()
+        return
+    
+    users = get_all_users()
+    total = len(users)
+    success = 0
+    failed = 0
+    
+    status_msg = await message.answer(
+        f"📢 <b>Начинаю рассылку...</b>\n\n"
+        f"Всего пользователей: {total}"
+    )
+    
+    for user in users:
+        user_id = user[0]
+        try:
+            if message.photo:
+                await bot.send_photo(
+                    user_id, 
+                    message.photo[-1].file_id,
+                    caption=message.caption or ""
+                )
+            elif message.video:
+                await bot.send_video(
+                    user_id,
+                    message.video.file_id,
+                    caption=message.caption or ""
+                )
+            elif message.text:
+                await bot.send_message(user_id, message.text)
+            
+            success += 1
+        except Exception as e:
+            failed += 1
+            logger.error(f"Ошибка рассылки для {user_id}: {e}")
+        
+        # Обновляем статус каждые 10 пользователей
+        if (success + failed) % 10 == 0:
+            try:
+                await status_msg.edit_text(
+                    f"📢 <b>Рассылка...</b>\n\n"
+                    f"Всего: {total}\n"
+                    f"✅ Отправлено: {success}\n"
+                    f"❌ Ошибок: {failed}"
+                )
+            except:
+                pass
+        
+        await asyncio.sleep(0.05)  # Задержка чтобы не получить бан
+    
+    await status_msg.edit_text(
+        f"✅ <b>Рассылка завершена!</b>\n\n"
+        f"Всего пользователей: {total}\n"
+        f"✅ Успешно: {success}\n"
+        f"❌ Ошибок: {failed}"
+    )
+    await state.clear()
 
 async def main():
     init_db()
