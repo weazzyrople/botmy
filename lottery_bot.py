@@ -849,7 +849,7 @@ async def cmd_start(message: types.Message):
         if args.startswith('ref_'):
             try:
                 referrer_id = int(args.split('_')[1])
-              if add_referral(user_id, referrer_id):
+                if add_referral(user_id, referrer_id):
 
                     try:
                         await bot.send_message(
