@@ -154,6 +154,17 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            referrer_id INTEGER,
+            bonus_paid BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (user_id),
+            FOREIGN KEY (referrer_id) REFERENCES users (user_id)
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -329,6 +340,104 @@ def get_all_promocodes():
     conn.close()
     return promos
 
+def get_referral_link(user_id: int) -> str:
+    bot_username = "твой_бот_username"  # Замени на username твоего бота
+    return f"https://t.me/{bot_username}?start=ref_{user_id}"
+
+
+def add_referral(user_id: int, referrer_id: int) -> bool:
+    """Добавить реферала (БЕЗ начисления бонуса)"""
+    if user_id == referrer_id:
+        return False
+    
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    
+   
+    cursor.execute('SELECT * FROM referrals WHERE user_id = ?', (user_id,))
+    if cursor.fetchone():
+        conn.close()
+        return False
+    
+   
+    cursor.execute('''
+        INSERT INTO referrals (user_id, referrer_id, bonus_paid)
+        VALUES (?, ?, 0)
+    ''', (user_id, referrer_id))
+    
+    conn.commit()
+    conn.close()
+    return True
+
+
+def pay_referral_bonus(user_id: int, deposit_amount: float):
+    """Начислить 5% рефереру от пополнения"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    
+    # Находим реферера
+    cursor.execute('SELECT referrer_id FROM referrals WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    
+    if result:
+        referrer_id = result[0]
+        bonus = deposit_amount * 0.05  # 5% от суммы
+        
+        # Начисляем бонус рефереру
+        cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', 
+                       (bonus, referrer_id))
+        
+        # Записываем транзакцию
+        cursor.execute('''
+            INSERT INTO transactions (user_id, type, amount, status, invoice_id)
+            VALUES (?, 'referral_bonus', ?, 'completed', ?)
+        ''', (referrer_id, bonus, f"ref_{user_id}_{deposit_amount}"))
+        
+        conn.commit()
+        conn.close()
+        
+        return referrer_id, bonus
+    
+    conn.close()
+    return None, 0
+
+
+def get_referral_stats(user_id: int):
+
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT COUNT(*), COALESCE(SUM(CASE WHEN bonus_paid = 1 THEN 1 ELSE 0 END), 0)
+        FROM referrals WHERE referrer_id = ?
+    ''', (user_id,))
+    
+    result = cursor.fetchone()
+    conn.close()
+    
+    total_refs = result[0] if result else 0
+    paid_refs = result[1] if result else 0
+    
+    return total_refs, paid_refs
+
+
+def get_referrals_list(user_id: int):
+
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT u.user_id, u.first_name, u.username, r.created_at, r.bonus_paid
+        FROM referrals r
+        JOIN users u ON r.user_id = u.user_id
+        WHERE r.referrer_id = ?
+        ORDER BY r.created_at DESC
+        LIMIT 20
+    ''', (user_id,))
+    
+    refs = cursor.fetchall()
+    conn.close()
+    return refs
 
 def delete_promocode(code: str):
     conn = sqlite3.connect('lottery_bot.db')
@@ -341,7 +450,7 @@ def main_keyboard():
     keyboard = [
         [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="🎁 Промокод")],
-        [KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="👥 Рефералы"), KeyboardButton(text="📊 Статистика")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -349,7 +458,7 @@ def admin_keyboard():
     keyboard = [
         [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="🎁 Промокод")],
-        [KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="👥 Рефералы"), KeyboardButton(text="📊 Статистика")],
         [KeyboardButton(text="⚙️ Админ панель")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -530,6 +639,19 @@ async def auto_check_payment(message: types.Message, user_id: int, invoice_id: s
             conn.commit()
             conn.close()
 
+           
+            referrer_id, bonus = pay_referral_bonus(user_id, amount)
+            if referrer_id:
+                try:
+                    await bot.send_message(
+                        referrer_id,
+                        f"💰 <b>Реферальный бонус!</b>\n\n"
+                        f"Ваш реферал пополнил баланс на {amount} USDT\n"
+                        f"🎁 Вам начислено: <b>{bonus:.2f} USDT</b> (5%)"
+                    )
+                except:
+                    pass
+
             data = await state.get_data()
             is_deposit_only = data.get('is_deposit_only', False)
 
@@ -672,6 +794,19 @@ async def process_successful_payment(message: types.Message, state: FSMContext):
                 conn.commit()
                 conn.close()
 
+                # ← ДОБАВЬ ЭТО: Начисляем 5% рефереру
+                referrer_id, bonus = pay_referral_bonus(user_id, amount_usdt)
+                if referrer_id:
+                    try:
+                        await bot.send_message(
+                            referrer_id,
+                            f"💰 <b>Реферальный бонус!</b>\n\n"
+                            f"Ваш реферал пополнил баланс на {amount_usdt} USDT\n"
+                            f"🎁 Вам начислено: <b>{bonus:.2f} USDT</b> (5%)"
+                        )
+                    except:
+                        pass
+
                 data = await state.get_data()
 
                 if purpose == "deposit":
@@ -707,6 +842,33 @@ async def cmd_start(message: types.Message):
     first_name = message.from_user.first_name or ""
 
     create_user(user_id, username, first_name)
+    
+    # Проверяем реферальную ссылку
+    if message.text and len(message.text.split()) > 1:
+        args = message.text.split()[1]
+        if args.startswith('ref_'):
+            try:
+                referrer_id = int(args.split('_')[1])
+              if add_referral(user_id, referrer_id):
+
+                    try:
+                        await bot.send_message(
+                            referrer_id,
+                            f"🎉 <b>Новый реферал!</b>\n\n"
+                            f"👤 {first_name} присоединился по вашей ссылке!\n"
+                            f"💰 Вы будете получать <b>5% от всех его пополнений</b>"
+                        )
+                    except:
+                        pass
+                    
+                    # Уведомляем нового пользователя
+                    await message.answer(
+                        f"🎁 <b>Добро пожаловать!</b>\n\n"
+                        f"Вы присоединились по реферальной ссылке!\n"
+                        f"Приглашайте друзей и получайте бонусы! 💰"
+                    )
+            except:
+                pass
 
     keyboard = admin_keyboard() if user_id in ADMIN_IDS else main_keyboard()
 
@@ -718,10 +880,10 @@ async def cmd_start(message: types.Message):
         f"<b>Способы оплаты:</b>\n"
         f"⭐️ Telegram Stars (50 Stars = 1 USDT)\n"
         f"💎 Криптовалюта (USDT)\n\n"
+        f"🎁 <b>Приглашай друзей и получай 1 USDT за каждого!</b>\n\n"
         f"Выбери действие из меню ниже ⬇️",
         reply_markup=keyboard
     )
-
 
 @dp.message(Command("myid"))
 async def cmd_my_id(message: types.Message):
@@ -1534,6 +1696,59 @@ async def process_broadcast(message: types.Message, state: FSMContext):
         f"❌ Ошибок: {failed}"
     )
     await state.clear()
+
+@dp.message(F.text == "👥 Рефералы")
+async def menu_referrals(message: types.Message):
+    user_id = message.from_user.id
+    
+  
+    total_refs, _ = get_referral_stats(user_id)
+    ref_link = get_referral_link(user_id)
+    
+  
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT COALESCE(SUM(amount), 0) FROM transactions 
+        WHERE user_id = ? AND type = 'referral_bonus'
+    ''', (user_id,))
+    total_earned = cursor.fetchone()[0]
+    conn.close()
+    
+    text = (
+        f"<b>👥 Реферальная программа</b>\n\n"
+        f"🎁 <b>Ваша реферальная ссылка:</b>\n"
+        f"<code>{ref_link}</code>\n\n"
+        f"📊 <b>Статистика:</b>\n"
+        f"👤 Приглашено: {total_refs} чел.\n"
+        f"💰 Заработано: {total_earned:.2f} USDT\n\n"
+        f"<b>Условия:</b>\n"
+        f"• За каждое пополнение друга: <b>5%</b>\n"
+        f"• Бонус начисляется автоматически\n"
+        f"• Бессрочно и без ограничений\n\n"
+        f"Поделитесь ссылкой с друзьями! 🚀"
+    )
+    
+ 
+    if total_refs > 0:
+        refs = get_referrals_list(user_id)
+        text += "\n\n<b>🎯 Ваши рефералы:</b>\n"
+        for ref in refs[:5]:
+            ref_id, name, username, created_at, _ = ref
+            text += f"👤 {name} (@{username or 'нет'})\n"
+        
+        if total_refs > 5:
+            text += f"\n<i>... и еще {total_refs - 5}</i>"
+    
+   
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="📤 Поделиться ссылкой",
+            url=f"https://t.me/share/url?url={ref_link}&text=Присоединяйся к лотерейному боту! 🎰"
+        )]
+    ])
+    
+    await message.answer(text, reply_markup=keyboard)
 
 async def main():
     init_db()
