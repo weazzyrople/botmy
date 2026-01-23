@@ -153,8 +153,8 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
-conn.commit()
-conn.close()
+    conn.commit()
+    conn.close()
 
 
 def get_user(user_id: int):
