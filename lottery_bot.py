@@ -106,7 +106,7 @@ def init_db():
         )
     ''')
     
-cursor.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS games (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -121,7 +121,7 @@ cursor.execute('''
         )
     ''')
 
-cursor.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -133,7 +133,7 @@ cursor.execute('''
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
-cursor.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS promocodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE,
@@ -143,7 +143,7 @@ cursor.execute('''
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-cursor.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS promocode_uses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
