@@ -873,7 +873,8 @@ async def select_bet_type(callback: types.CallbackQuery, state: FSMContext):
     game_id = parts[1]
     bet_type = parts[2]
     
-    await state.update_data(bet_type=bet_type)
+    await state.update_data(game_id=game_id, bet_type=bet_type, is_deposit_only=False)
+    await state.set_state(BetStates.entering_custom_amount)
     
     game_name = GAMES[game_id]['name']
     odds = BET_TYPES[game_id][bet_type]['odds']
@@ -881,8 +882,8 @@ async def select_bet_type(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         f"<b>🎮 {game_name}</b>\n"
         f"<b>🎯 Ставка:</b> {bet_type} (x{odds})\n\n"
-        f"Выбери сумму ставки:",
-        reply_markup=bet_amount_keyboard(game_id, bet_type)
+        f"💰 <b>Введите сумму ставки (от 1 USDT):</b>\n\n"
+        f"<i>Примеры: 1 или 5 или 10 или 25</i>"
     )
     await callback.answer()
 
