@@ -843,14 +843,14 @@ async def cmd_start(message: types.Message):
 
     create_user(user_id, username, first_name)
     
-    # Проверяем реферальную ссылку
+    
     if message.text and len(message.text.split()) > 1:
         args = message.text.split()[1]
         if args.startswith('ref_'):
             try:
                 referrer_id = int(args.split('_')[1])
                 if add_referral(user_id, referrer_id):
-
+                    # Уведомляем реферера
                     try:
                         await bot.send_message(
                             referrer_id,
@@ -861,7 +861,7 @@ async def cmd_start(message: types.Message):
                     except:
                         pass
                     
-                    # Уведомляем нового пользователя
+                   
                     await message.answer(
                         f"🎁 <b>Добро пожаловать!</b>\n\n"
                         f"Вы присоединились по реферальной ссылке!\n"
@@ -871,6 +871,13 @@ async def cmd_start(message: types.Message):
                 pass
 
     keyboard = admin_keyboard() if user_id in ADMIN_IDS else main_keyboard()
+    
+   
+    ref_link = get_referral_link(user_id)
+    inline_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👥 Моя реферальная ссылка", callback_data="show_ref_link")],
+        [InlineKeyboardButton(text="📤 Поделиться", url=f"https://t.me/share/url?url={ref_link}&text=Присоединяйся к лотерейному боту! 🎰")]
+    ])
 
     await message.answer(
         f"<b>🎰 Добро пожаловать в Лотерейного Бота!</b>\n\n"
@@ -880,11 +887,16 @@ async def cmd_start(message: types.Message):
         f"<b>Способы оплаты:</b>\n"
         f"⭐️ Telegram Stars (50 Stars = 1 USDT)\n"
         f"💎 Криптовалюта (USDT)\n\n"
-        f"🎁 <b>Приглашай друзей и получай 1 USDT за каждого!</b>\n\n"
+        f"🎁 <b>Приглашай друзей и получай 5% от их пополнений!</b>\n\n"
         f"Выбери действие из меню ниже ⬇️",
         reply_markup=keyboard
     )
-
+    
+   
+    await message.answer(
+        "💰 <b>Начни зарабатывать прямо сейчас!</b>",
+        reply_markup=inline_keyboard
+    )
 @dp.message(Command("myid"))
 async def cmd_my_id(message: types.Message):
     await message.answer(
@@ -1749,6 +1761,38 @@ async def menu_referrals(message: types.Message):
     ])
     
     await message.answer(text, reply_markup=keyboard)
+
+@dp.callback_query(F.data == "show_ref_link")
+async def show_ref_link_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    ref_link = get_referral_link(user_id)
+    
+   
+    total_refs, _ = get_referral_stats(user_id)
+    
+    
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT COALESCE(SUM(amount), 0) FROM transactions 
+        WHERE user_id = ? AND type = 'referral_bonus'
+    ''', (user_id,))
+    total_earned = cursor.fetchone()[0]
+    conn.close()
+    
+    await callback.message.answer(
+        f"<b>👥 Твоя реферальная ссылка:</b>\n\n"
+        f"<code>{ref_link}</code>\n\n"
+        f"📊 <b>Статистика:</b>\n"
+        f"👤 Рефералов: {total_refs}\n"
+        f"💰 Заработано: {total_earned:.2f} USDT\n\n"
+        f"🎁 Получай <b>5% от каждого пополнения</b> друга!\n\n"
+        f"Скопируй ссылку и отправь друзьям 👆",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📤 Поделиться", url=f"https://t.me/share/url?url={ref_link}&text=Присоединяйся к лотерейному боту! 🎰")]
+        ])
+    )
+    await callback.answer()
 
 async def main():
     init_db()
