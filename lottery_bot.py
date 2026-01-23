@@ -277,13 +277,13 @@ def use_promocode(user_id: int, code: str):
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
     
-
+   
     cursor.execute('SELECT * FROM promocode_uses WHERE user_id = ? AND code = ?', (user_id, code))
     if cursor.fetchone():
         conn.close()
         return False, "Вы уже использовали этот промокод!"
     
-    
+
     cursor.execute('SELECT * FROM promocodes WHERE code = ?', (code,))
     promo = cursor.fetchone()
     
@@ -297,15 +297,19 @@ def use_promocode(user_id: int, code: str):
         conn.close()
         return False, "Промокод исчерпан!"
     
- 
+  
     cursor.execute('UPDATE promocodes SET current_uses = current_uses + 1 WHERE code = ?', (code,))
+    
+    
     cursor.execute('''
         INSERT INTO promocode_uses (user_id, code, amount)
         VALUES (?, ?, ?)
     ''', (user_id, code, amount))
     
-    update_balance(user_id, amount)
+  
+    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
     
+
     cursor.execute('''
         INSERT INTO transactions (user_id, type, amount, status, invoice_id)
         VALUES (?, 'promocode', ?, 'completed', ?)
