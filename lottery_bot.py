@@ -899,6 +899,7 @@ async def process_custom_amount(message: types.Message, state: FSMContext):
         is_deposit_only = data.get('is_deposit_only', False)
         
         if is_deposit_only:
+            # Это пополнение баланса
             await state.update_data(deposit_amount=amount)
             await message.answer(
                 f"💰 <b>Пополнение на {amount} USDT</b>\n\n"
@@ -906,15 +907,19 @@ async def process_custom_amount(message: types.Message, state: FSMContext):
                 reply_markup=payment_method_keyboard(amount, "deposit")
             )
         else:
+            # Это ставка в игре
             game_id = data.get('game_id')
             bet_type = data.get('bet_type')
             user_id = message.from_user.id
             balance = get_balance(user_id)
             
             if balance >= amount:
+                # Достаточно средств - списываем и играем
+                update_balance(user_id, -amount)
                 await state.update_data(bet_amount=amount)
                 await process_game(message, user_id, game_id, bet_type, amount, state)
             else:
+                # Недостаточно средств - предлагаем пополнить
                 need_amount = amount - balance
                 await state.update_data(bet_amount=amount)
                 await message.answer(
