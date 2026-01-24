@@ -219,6 +219,8 @@ def record_game(user_id: int, game_type: str, bet_type: str, bet_amount: float,
     ''', (user_id, game_type, bet_type, bet_amount, result_value, win, payout))
 
     if win:
+        # При выигрыше: добавляем чистую прибыль (payout - bet_amount)
+        profit = payout - bet_amount
         cursor.execute('''
             UPDATE users SET 
                 balance = balance + ?,
@@ -227,8 +229,9 @@ def record_game(user_id: int, game_type: str, bet_type: str, bet_amount: float,
                 games_played = games_played + 1,
                 wins = wins + 1
             WHERE user_id = ?
-        ''', (payout - bet_amount, bet_amount, payout, user_id))
+        ''', (profit, bet_amount, payout, user_id))
     else:
+        # При проигрыше: вычитаем ставку
         cursor.execute('''
             UPDATE users SET 
                 balance = balance - ?,
@@ -341,7 +344,7 @@ def get_all_promocodes():
     return promos
 
 def get_referral_link(user_id: int) -> str:
-    bot_username = "твой_бот_username"  # Замени на username твоего бота
+    bot_username = "@ffortunna_bot"  
     return f"https://t.me/{bot_username}?start=ref_{user_id}"
 
 
@@ -1088,15 +1091,13 @@ async def process_custom_amount(message: types.Message, state: FSMContext):
                 reply_markup=payment_method_keyboard(amount, "deposit")
             )
         else:
-            # Это ставка в игре
             game_id = data.get('game_id')
             bet_type = data.get('bet_type')
             user_id = message.from_user.id
             balance = get_balance(user_id)
             
-            if balance >= amount:
-                # Достаточно средств - списываем и играем
-                update_balance(user_id, -amount)
+           if balance >= amount:
+                # Достаточно средств - играем (баланс спишется в record_game)
                 await state.update_data(bet_amount=amount)
                 await process_game(message, user_id, game_id, bet_type, amount, state)
             else:
