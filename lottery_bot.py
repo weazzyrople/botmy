@@ -1457,7 +1457,7 @@ async def process_custom_amount(message: types.Message, state: FSMContext):
             user_id = message.from_user.id
             balance = get_balance(user_id)
             
-         if balance >= amount:
+            if balance >= amount:
                 # Достаточно средств - играем (баланс спишется в record_game)
                 await state.update_data(bet_amount=amount)
                 await process_game(message, user_id, game_id, bet_type, amount, state)
