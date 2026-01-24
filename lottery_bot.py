@@ -2,6 +2,8 @@ import os
 import sqlite3
 import asyncio
 import logging
+import requests
+import time
 from datetime import datetime
 from typing import Optional
 from aiogram import Bot, Dispatcher, types, F
@@ -13,6 +15,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, DiceEmoji
 from dotenv import load_dotenv
+from pytonconnect import TonConnect
+import base64
 
 load_dotenv()
 
@@ -32,6 +36,25 @@ dp = Dispatcher(storage=storage)
 
 # Курс: 50 Stars = 1 USDT
 STARS_TO_USDT_RATE = 1 / 50  # = 0.02
+TON_TO_USDT_RATE = 5.5  # Запасной курс если API не работает
+
+def get_ton_price() -> float:
+    """Получить актуальный курс TON/USDT с CoinGecko"""
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
+        response = requests.get(url, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            price = data.get("the-open-network", {}).get("usd", TON_TO_USDT_RATE)
+            logger.info(f"💱 Актуальный курс TON: ${price}")
+            return float(price)
+        else:
+            logger.warning(f"⚠️ API не работает, используется запасной курс {TON_TO_USDT_RATE}")
+            return TON_TO_USDT_RATE
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения курса TON: {e}")
+        return TON_TO_USDT_RATE
 
 class BetStates(StatesGroup):
     choosing_game = State()
@@ -39,6 +62,7 @@ class BetStates(StatesGroup):
     entering_custom_amount = State()
     entering_custom_stars = State()
     waiting_payment = State()
+    waiting_ton_payment = State()
     admin_entering_user_id = State()
     admin_entering_balance = State()
     entering_promocode = State()
@@ -492,6 +516,7 @@ def payment_method_keyboard(amount: float, purpose: str):
     buttons = [
         [InlineKeyboardButton(text="⭐ Telegram Stars", callback_data=f"pay_stars_{amount}_{purpose}")],
         [InlineKeyboardButton(text="💎 Crypto (USDT)", callback_data=f"pay_crypto_{amount}_{purpose}")],
+        [InlineKeyboardButton(text="💠 TON Wallet", callback_data=f"pay_ton_{amount}_{purpose}")],
         [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -712,6 +737,341 @@ async def create_stars_invoice(user_id: int, stars_amount: int, title: str, desc
         logger.error(f"❌ Ошибка Stars инвойса: {e}")
         return False
 
+async def check_ton_transaction(wallet_address: str, amount_ton: float, comment: str, timeout: int = 600):
+    """
+    Автоматическая проверка TON транзакции
+    wallet_address - адрес получателя
+    amount_ton - сумма в TON
+    comment - комментарий для поиска
+    timeout - время ожидания в секундах (10 минут)
+    """
+    logger.info(f"🔍 Запуск проверки TON транзакции: {amount_ton} TON, комментарий: {comment}")
+    
+    start_time = time.time()
+    check_interval = 5  # Проверяем каждые 5 секунд
+    
+    # API endpoint для проверки транзакций (используем TON API)
+    api_url = f"https://tonapi.io/v2/blockchain/accounts/{wallet_address}/transactions"
+    
+    last_checked_lt = None
+    
+    while time.time() - start_time < timeout:
+        try:
+            # Получаем последние транзакции
+            params = {"limit": 10}
+            if last_checked_lt:
+                params["before_lt"] = last_checked_lt
+            
+            response = requests.get(api_url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                transactions = data.get("transactions", [])
+                
+                for tx in transactions:
+                    # Проверяем входящую транзакцию
+                    if tx.get("in_msg"):
+                        in_msg = tx["in_msg"]
+                        
+                        # Получаем сумму
+                        value = int(in_msg.get("value", 0)) / 1_000_000_000  # Конвертируем из nanoTON
+                        
+                        # Получаем комментарий
+                        msg_data = in_msg.get("message", "")
+                        tx_comment = ""
+                        
+                        if isinstance(msg_data, str) and msg_data:
+                            try:
+                                # Декодируем Base64 комментарий
+                                decoded = base64.b64decode(msg_data).decode('utf-8', errors='ignore')
+                                tx_comment = decoded
+                            except:
+                                tx_comment = msg_data
+                        
+                        # Проверяем совпадение суммы и комментария
+                        if abs(value - amount_ton) < 0.01 and comment.lower() in tx_comment.lower():
+                            logger.info(f"✅ TON транзакция найдена! Сумма: {value}, комментарий: {tx_comment}")
+                            return True, tx
+                
+                # Обновляем последний проверенный lt
+                if transactions:
+                    last_checked_lt = transactions[0].get("lt")
+            else:
+                logger.warning(f"⚠️ Ошибка API TON: {response.status_code}")
+        
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки TON транзакции: {e}")
+        
+        await asyncio.sleep(check_interval)
+    
+    logger.warning(f"⏰ Время ожидания TON транзакции истекло")
+    return False, None
+
+
+async def auto_check_ton_payment(message: types.Message, user_id: int, payment_id: str, 
+                                 amount_ton: float, amount_usdt: float, state: FSMContext):
+    """Автоматическая проверка и зачисление TON платежа"""
+    logger.info(f"⏳ Запуск автопроверки TON платежа для {payment_id}")
+    
+   
+    found, transaction = await check_ton_transaction(
+        wallet_address=TON_WALLET_ADDRESS,
+        amount_ton=amount_ton,
+        comment=payment_id,
+        timeout=600  # 10 минут
+    )
+    
+    if found:
+        logger.info(f"✅ TON платеж получен!")
+        
+        # Начисляем баланс
+        update_balance(user_id, amount_usdt)
+        
+        # Записываем транзакцию
+        conn = sqlite3.connect('lottery_bot.db')
+        cursor = conn.cursor()
+        invoice_id = f"ton_{payment_id}"
+        cursor.execute('''
+            INSERT INTO transactions (user_id, type, amount, status, invoice_id)
+            VALUES (?, 'deposit', ?, 'completed', ?)
+        ''', (user_id, amount_usdt, invoice_id))
+        cursor.execute(
+            'UPDATE users SET total_deposited = total_deposited + ? WHERE user_id = ?',
+            (amount_usdt, user_id)
+        )
+        conn.commit()
+        conn.close()
+        
+        # Начисляем реферальный бонус
+        referrer_id, bonus = pay_referral_bonus(user_id, amount_usdt)
+        if referrer_id:
+            try:
+                await bot.send_message(
+                    referrer_id,
+                    f"💰 <b>Реферальный бонус!</b>\n\n"
+                    f"Ваш реферал пополнил баланс на {amount_usdt} USDT\n"
+                    f"🎁 Вам начислено: <b>{bonus:.2f} USDT</b> (5%)"
+                )
+            except:
+                pass
+        
+        # Проверяем цель платежа
+        data = await state.get_data()
+        is_deposit_only = data.get('is_deposit_only', False)
+        
+        if is_deposit_only:
+            # Обычное пополнение
+            try:
+                await message.edit_text(
+                    f"✅ <b>TON платеж получен!</b>\n\n"
+                    f"💠 Оплачено: {amount_ton} TON\n"
+                    f"💰 Зачислено: <b>{amount_usdt} USDT</b>\n"
+                    f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
+                )
+            except:
+                await bot.send_message(
+                    user_id,
+                    f"✅ <b>TON платеж получен!</b>\n\n"
+                    f"💠 Оплачено: {amount_ton} TON\n"
+                    f"💰 Зачислено: <b>{amount_usdt} USDT</b>\n"
+                    f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
+                )
+            await state.clear()
+        else:
+            # Пополнение для ставки
+            game_id = data.get('game_id')
+            bet_type = data.get('bet_type')
+            bet_amount = data.get('bet_amount')
+            
+            if game_id and bet_type and bet_amount:
+                await process_game(message, user_id, game_id, bet_type, bet_amount, state)
+        
+        return True
+    else:
+        # Транзакция не найдена
+        logger.warning(f"⏰ TON платеж не получен в течение 10 минут")
+        try:
+            await message.edit_text(
+                f"⏰ <b>Время ожидания истекло</b>\n\n"
+                f"Платеж не был найден в течение 10 минут.\n\n"
+                f"Если вы отправили {amount_ton} TON с комментарием:\n"
+                f"<code>{payment_id}</code>\n\n"
+                f"Средства будут зачислены автоматически при поступлении.\n"
+                f"Или свяжитесь с поддержкой."
+            )
+        except:
+            pass
+        
+        await state.clear()
+        return False
+
+async def check_ton_transaction(wallet_address: str, amount_ton: float, comment: str, timeout: int = 600):
+    """
+    Автоматическая проверка TON транзакции
+    wallet_address - адрес получателя
+    amount_ton - сумма в TON
+    comment - комментарий для поиска
+    timeout - время ожидания в секундах (10 минут)
+    """
+    logger.info(f"🔍 Запуск проверки TON транзакции: {amount_ton} TON, комментарий: {comment}")
+    
+    start_time = time.time()
+    check_interval = 5  # Проверяем каждые 5 секунд
+    
+    # API endpoint для проверки транзакций (используем TON API)
+    api_url = f"https://tonapi.io/v2/blockchain/accounts/{wallet_address}/transactions"
+    
+    last_checked_lt = None
+    
+    while time.time() - start_time < timeout:
+        try:
+            # Получаем последние транзакции
+            params = {"limit": 10}
+            if last_checked_lt:
+                params["before_lt"] = last_checked_lt
+            
+            response = requests.get(api_url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                transactions = data.get("transactions", [])
+                
+                for tx in transactions:
+                    # Проверяем входящую транзакцию
+                    if tx.get("in_msg"):
+                        in_msg = tx["in_msg"]
+                        
+                        # Получаем сумму
+                        value = int(in_msg.get("value", 0)) / 1_000_000_000  # Конвертируем из nanoTON
+                        
+                        # Получаем комментарий
+                        msg_data = in_msg.get("message", "")
+                        tx_comment = ""
+                        
+                        if isinstance(msg_data, str) and msg_data:
+                            try:
+                                # Декодируем Base64 комментарий
+                                decoded = base64.b64decode(msg_data).decode('utf-8', errors='ignore')
+                                tx_comment = decoded
+                            except:
+                                tx_comment = msg_data
+                        
+                        # Проверяем совпадение суммы и комментария
+                        if abs(value - amount_ton) < 0.01 and comment.lower() in tx_comment.lower():
+                            logger.info(f"✅ TON транзакция найдена! Сумма: {value}, комментарий: {tx_comment}")
+                            return True, tx
+                
+                # Обновляем последний проверенный lt
+                if transactions:
+                    last_checked_lt = transactions[0].get("lt")
+            else:
+                logger.warning(f"⚠️ Ошибка API TON: {response.status_code}")
+        
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки TON транзакции: {e}")
+        
+        await asyncio.sleep(check_interval)
+    
+    logger.warning(f"⏰ Время ожидания TON транзакции истекло")
+    return False, None
+
+
+async def auto_check_ton_payment(message: types.Message, user_id: int, payment_id: str, 
+                                 amount_ton: float, amount_usdt: float, state: FSMContext):
+    """Автоматическая проверка и зачисление TON платежа"""
+    logger.info(f"⏳ Запуск автопроверки TON платежа для {payment_id}")
+    
+    # Проверяем транзакцию
+    found, transaction = await check_ton_transaction(
+        wallet_address=TON_WALLET_ADDRESS,
+        amount_ton=amount_ton,
+        comment=payment_id,
+        timeout=600  # 10 минут
+    )
+    
+    if found:
+        logger.info(f"✅ TON платеж получен!")
+        
+        # Начисляем баланс
+        update_balance(user_id, amount_usdt)
+        
+        # Записываем транзакцию
+        conn = sqlite3.connect('lottery_bot.db')
+        cursor = conn.cursor()
+        invoice_id = f"ton_{payment_id}"
+        cursor.execute('''
+            INSERT INTO transactions (user_id, type, amount, status, invoice_id)
+            VALUES (?, 'deposit', ?, 'completed', ?)
+        ''', (user_id, amount_usdt, invoice_id))
+        cursor.execute(
+            'UPDATE users SET total_deposited = total_deposited + ? WHERE user_id = ?',
+            (amount_usdt, user_id)
+        )
+        conn.commit()
+        conn.close()
+        
+        # Начисляем реферальный бонус
+        referrer_id, bonus = pay_referral_bonus(user_id, amount_usdt)
+        if referrer_id:
+            try:
+                await bot.send_message(
+                    referrer_id,
+                    f"💰 <b>Реферальный бонус!</b>\n\n"
+                    f"Ваш реферал пополнил баланс на {amount_usdt} USDT\n"
+                    f"🎁 Вам начислено: <b>{bonus:.2f} USDT</b> (5%)"
+                )
+            except:
+                pass
+        
+        # Проверяем цель платежа
+        data = await state.get_data()
+        is_deposit_only = data.get('is_deposit_only', False)
+        
+        if is_deposit_only:
+            # Обычное пополнение
+            try:
+                await message.edit_text(
+                    f"✅ <b>TON платеж получен!</b>\n\n"
+                    f"💠 Оплачено: {amount_ton} TON\n"
+                    f"💰 Зачислено: <b>{amount_usdt} USDT</b>\n"
+                    f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
+                )
+            except:
+                await bot.send_message(
+                    user_id,
+                    f"✅ <b>TON платеж получен!</b>\n\n"
+                    f"💠 Оплачено: {amount_ton} TON\n"
+                    f"💰 Зачислено: <b>{amount_usdt} USDT</b>\n"
+                    f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
+                )
+            await state.clear()
+        else:
+            # Пополнение для ставки
+            game_id = data.get('game_id')
+            bet_type = data.get('bet_type')
+            bet_amount = data.get('bet_amount')
+            
+            if game_id and bet_type and bet_amount:
+                await process_game(message, user_id, game_id, bet_type, bet_amount, state)
+        
+        return True
+    else:
+        # Транзакция не найдена
+        logger.warning(f"⏰ TON платеж не получен в течение 10 минут")
+        try:
+            await message.edit_text(
+                f"⏰ <b>Время ожидания истекло</b>\n\n"
+                f"Платеж не был найден в течение 10 минут.\n\n"
+                f"Если вы отправили {amount_ton} TON с комментарием:\n"
+                f"<code>{payment_id}</code>\n\n"
+                f"Средства будут зачислены автоматически при поступлении.\n"
+                f"Или свяжитесь с поддержкой."
+            )
+        except:
+            pass
+        
+        await state.clear()
+        return False
 
 async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float, state: FSMContext):
     game_data = GAMES[game_id]
@@ -889,7 +1249,8 @@ async def cmd_start(message: types.Message):
         f"🎲 Кубик\n🏀 Баскетбол\n⚽ Футбол\n🎯 Дартс\n🎳 Боулинг\n\n"
         f"<b>Способы оплаты:</b>\n"
         f"⭐️ Telegram Stars (50 Stars = 1 USDT)\n"
-        f"💎 Криптовалюта (USDT)\n\n"
+        f"💎 Криптовалюта (USDT)\n"
+        f"💠 TON Wallet\n\n"
         f"🎁 <b>Приглашай друзей и получай 5% от их пополнений!</b>\n\n"
         f"Выбери действие из меню ниже ⬇️",
         reply_markup=keyboard
@@ -1096,7 +1457,7 @@ async def process_custom_amount(message: types.Message, state: FSMContext):
             user_id = message.from_user.id
             balance = get_balance(user_id)
             
-           if balance >= amount:
+         if balance >= amount:
                 # Достаточно средств - играем (баланс спишется в record_game)
                 await state.update_data(bet_amount=amount)
                 await process_game(message, user_id, game_id, bet_type, amount, state)
@@ -1794,6 +2155,174 @@ async def show_ref_link_callback(callback: types.CallbackQuery):
         ])
     )
     await callback.answer()
+
+@dp.callback_query(F.data.startswith("pay_ton_"))
+async def process_ton_payment(callback: types.CallbackQuery, state: FSMContext):
+    parts = callback.data.split("_")
+    amount_usdt = float(parts[2])
+    purpose = parts[3]
+    
+    user_id = callback.from_user.id
+    
+    # Получаем актуальный курс TON
+    ton_rate = get_ton_price()
+    
+    # Конвертируем USDT в TON по актуальному курсу
+    amount_ton = amount_usdt / ton_rate
+    amount_ton = round(amount_ton, 3)
+    
+    # Генерируем уникальный комментарий для идентификации платежа
+    payment_id = f"pay{user_id}{int(datetime.now().timestamp())}"
+    
+    # Сохраняем данные платежа
+    await state.update_data(
+        ton_payment_id=payment_id,
+        ton_amount_usdt=amount_usdt,
+        ton_amount_ton=amount_ton,
+        is_deposit_only=(purpose == "deposit")
+    )
+    await state.set_state(BetStates.waiting_ton_payment)
+    
+    # Формируем ссылку на TON кошелёк
+    ton_link = f"ton://transfer/{TON_WALLET_ADDRESS}?amount={int(amount_ton * 1_000_000_000)}&text={payment_id}"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💠 Открыть TON Wallet", url=ton_link)],
+        [InlineKeyboardButton(text="✅ Я оплатил", callback_data=f"ton_paid_{payment_id}")],
+        [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
+    ])
+    
+    await callback.message.edit_text(
+        f"💠 <b>Оплата через TON Wallet</b>\n\n"
+        f"💰 Сумма: <b>{amount_ton} TON</b> (= {amount_usdt} USDT)\n"
+        f"💱 Курс: 1 TON = ${ton_rate}\n\n"
+        f"📝 Адрес кошелька:\n<code>{TON_WALLET_ADDRESS}</code>\n\n"
+        f"❗️ <b>ВАЖНО:</b> В комментарии к переводу укажите:\n"
+        f"<code>{payment_id}</code>\n\n"
+        f"<b>Инструкция:</b>\n"
+        f"1. Нажмите «Открыть TON Wallet»\n"
+        f"2. Переведите <b>{amount_ton} TON</b>\n"
+        f"3. Убедитесь что комментарий указан\n"
+        f"4. Нажмите «Я оплатил»\n\n"
+        f"✅ Средства зачислятся <b>автоматически</b> в течение 1-2 минут",
+        reply_markup=keyboard
+    )
+    
+    await callback.answer()
+  
+
+@dp.callback_query(F.data.startswith("ton_paid_"))
+async def confirm_ton_payment(callback: types.CallbackQuery, state: FSMContext):
+    payment_id = callback.data.replace("ton_paid_", "")
+    user_id = callback.from_user.id
+    
+    data = await state.get_data()
+    
+    if data.get('ton_payment_id') != payment_id:
+        await callback.answer("❌ Ошибка идентификации платежа", show_alert=True)
+        return
+    
+    amount_usdt = data.get('ton_amount_usdt')
+    amount_ton = data.get('ton_amount_ton')
+    
+    status_message = await callback.message.edit_text(
+        f"⏳ <b>Проверяем платеж...</b>\n\n"
+        f"Ожидаем поступление {amount_ton} TON\n"
+        f"Комментарий: <code>{payment_id}</code>\n\n"
+        f"Это займет 1-2 минуты..."
+    )
+    
+    await callback.answer("⏳ Проверяем транзакцию...")
+    
+    # Запускаем автопроверку в фоне
+    asyncio.create_task(
+        auto_check_ton_payment(
+            status_message, 
+            user_id, 
+            payment_id, 
+            amount_ton, 
+            amount_usdt, 
+            state
+        )
+    )
+
+
+# Команда для админа - подтверждение TON платежа
+@dp.message(Command("approve_ton"))
+async def approve_ton_payment(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    
+    try:
+        parts = message.text.split()
+        target_user_id = int(parts[1])
+        amount_usdt = float(parts[2])
+        
+        # Начисляем баланс
+        update_balance(target_user_id, amount_usdt)
+        
+        # Записываем транзакцию
+        conn = sqlite3.connect('lottery_bot.db')
+        cursor = conn.cursor()
+        invoice_id = f"ton_{target_user_id}_{datetime.now().timestamp()}"
+        cursor.execute('''
+            INSERT INTO transactions (user_id, type, amount, status, invoice_id)
+            VALUES (?, 'deposit', ?, 'completed', ?)
+        ''', (target_user_id, amount_usdt, invoice_id))
+        cursor.execute(
+            'UPDATE users SET total_deposited = total_deposited + ? WHERE user_id = ?',
+            (amount_usdt, target_user_id)
+        )
+        conn.commit()
+        conn.close()
+        
+        # Начисляем реферальный бонус
+        referrer_id, bonus = pay_referral_bonus(target_user_id, amount_usdt)
+        if referrer_id:
+            try:
+                await bot.send_message(
+                    referrer_id,
+                    f"💰 <b>Реферальный бонус!</b>\n\n"
+                    f"Ваш реферал пополнил баланс на {amount_usdt} USDT\n"
+                    f"🎁 Вам начислено: <b>{bonus:.2f} USDT</b> (5%)"
+                )
+            except:
+                pass
+        
+        # Уведомляем пользователя
+        try:
+            await bot.send_message(
+                target_user_id,
+                f"✅ <b>Оплата подтверждена!</b>\n\n"
+                f"💰 Зачислено: <b>{amount_usdt} USDT</b>\n"
+                f"💵 Ваш баланс: <b>{get_balance(target_user_id):.2f} USDT</b>"
+            )
+        except:
+            pass
+        
+        await message.answer(
+            f"✅ <b>Платеж подтвержден!</b>\n\n"
+            f"User: <code>{target_user_id}</code>\n"
+            f"Сумма: {amount_usdt} USDT"
+        )
+        
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {e}\n\nФормат: /approve_ton USER_ID AMOUNT")
+
+@dp.message(Command("tonprice"))
+async def cmd_ton_price(message: types.Message):
+    """Показать текущий курс TON"""
+    current_price = get_ton_price()
+    
+    await message.answer(
+        f"💱 <b>Актуальный курс TON</b>\n\n"
+        f"1 TON = <b>${current_price}</b> USDT\n\n"
+        f"<b>Примеры конвертации:</b>\n"
+        f"• 10 USDT = <b>{10/current_price:.3f} TON</b>\n"
+        f"• 50 USDT = <b>{50/current_price:.3f} TON</b>\n"
+        f"• 100 USDT = <b>{100/current_price:.3f} TON</b>\n\n"
+        f"<i>Курс обновляется при каждой оплате</i>"
+    )
 
 async def main():
     init_db()
