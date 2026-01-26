@@ -368,7 +368,7 @@ def get_all_promocodes():
     return promos
 
 def get_referral_link(user_id: int) -> str:
-    bot_username = "@ffortunna_bot"  
+    bot_username = "ffortunna_bot"  
     return f"https://t.me/{bot_username}?start=ref_{user_id}"
 
 
