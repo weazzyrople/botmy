@@ -34,9 +34,9 @@ bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTM
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
-# Курс: 50 Stars = 1 USDT
 STARS_TO_USDT_RATE = 1 / 50  # = 0.02
 TON_TO_USDT_RATE = 5.5  # Запасной курс если API не работает
+TON_WALLET_ADDRESS = "UQDzTiMyO6C15cz1_n2dRLitZr7Q2FMCa4kDEG-cD7QHwcgZ"  
 
 def get_ton_price() -> float:
     """Получить актуальный курс TON/USDT с CoinGecko"""
