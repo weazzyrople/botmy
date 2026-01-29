@@ -1065,7 +1065,6 @@ async def cmd_start(message: types.Message):
                         logger.error(f"❌ Ошибка уведомления нового реферала: {e}")
             except Exception as e:
                 logger.error(f"❌ Ошибка обработки реферальной ссылки: {e}")
-                    )
             except:
                 pass
 
