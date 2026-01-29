@@ -1043,7 +1043,7 @@ async def cmd_start(message: types.Message):
         args = message.text.split()[1]
         if args.startswith('ref_'):
             try:
-              if add_referral(user_id, referrer_id):
+             if add_referral(user_id, referrer_id):
                     try:
                         await bot.send_message(
                             referrer_id,
@@ -1054,6 +1054,7 @@ async def cmd_start(message: types.Message):
                     except Exception as e:
                         logger.error(f"❌ Ошибка отправки сообщения реферу: {e}")
                     
+                   
                     try:
                         await message.answer(
                             f"🎁 <b>Добро пожаловать!</b>\n\n"
@@ -1064,12 +1065,6 @@ async def cmd_start(message: types.Message):
                         logger.error(f"❌ Ошибка уведомления нового реферала: {e}")
             except Exception as e:
                 logger.error(f"❌ Ошибка обработки реферальной ссылки: {e}")
-                    
-                   
-                        await message.answer(
-                            f"🎁 <b>Добро пожаловать!</b>\n\n"
-                            f"Вы присоединились по реферальной ссылке!\n"
-                            f"Приглашайте друзей и получайте бонусы! 💰"
                     )
             except:
                 pass
