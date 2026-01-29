@@ -373,20 +373,21 @@ def get_referral_link(user_id: int) -> str:
 
 
 def add_referral(user_id: int, referrer_id: int) -> bool:
-    """Добавить реферала (БЕЗ начисления бонуса)"""
     if user_id == referrer_id:
+        logger.warning(f"❌ Попытка сделать себя рефералом: {user_id}")
         return False
     
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
     
-   
+  
     cursor.execute('SELECT * FROM referrals WHERE user_id = ?', (user_id,))
     if cursor.fetchone():
+        logger.warning(f"❌ Реферал {user_id} уже существует")
         conn.close()
         return False
     
-   
+  
     cursor.execute('''
         INSERT INTO referrals (user_id, referrer_id, bonus_paid)
         VALUES (?, ?, 0)
@@ -394,8 +395,9 @@ def add_referral(user_id: int, referrer_id: int) -> bool:
     
     conn.commit()
     conn.close()
+    
+    logger.info(f"✅ Реферал добавлен: user={user_id}, referrer={referrer_id}")
     return True
-
 
 def pay_referral_bonus(user_id: int, deposit_amount: float):
     """Начислить 5% рефереру от пополнения"""
@@ -430,22 +432,19 @@ def pay_referral_bonus(user_id: int, deposit_amount: float):
 
 
 def get_referral_stats(user_id: int):
-
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT COUNT(*), COALESCE(SUM(CASE WHEN bonus_paid = 1 THEN 1 ELSE 0 END), 0)
-        FROM referrals WHERE referrer_id = ?
+        SELECT COUNT(*) FROM referrals WHERE referrer_id = ?
     ''', (user_id,))
     
     result = cursor.fetchone()
     conn.close()
     
     total_refs = result[0] if result else 0
-    paid_refs = result[1] if result else 0
     
-    return total_refs, paid_refs
+    return total_refs, 0 
 
 
 def get_referrals_list(user_id: int):
@@ -1044,9 +1043,7 @@ async def cmd_start(message: types.Message):
         args = message.text.split()[1]
         if args.startswith('ref_'):
             try:
-                referrer_id = int(args.split('_')[1])
-                if add_referral(user_id, referrer_id):
-                    # Уведомляем реферера
+              if add_referral(user_id, referrer_id):
                     try:
                         await bot.send_message(
                             referrer_id,
@@ -1054,8 +1051,19 @@ async def cmd_start(message: types.Message):
                             f"👤 {first_name} присоединился по вашей ссылке!\n"
                             f"💰 Вы будете получать <b>5% от всех его пополнений</b>"
                         )
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка отправки сообщения реферу: {e}")
+                    
+                    try:
+                        await message.answer(
+                            f"🎁 <b>Добро пожаловать!</b>\n\n"
+                            f"Вы присоединились по реферальной ссылке!\n"
+                            f"Приглашайте друзей и получайте бонусы! 💰"
+                        )
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка уведомления нового реферала: {e}")
+            except Exception as e:
+                logger.error(f"❌ Ошибка обработки реферальной ссылки: {e}")
                     
                    
                     await message.answer(
