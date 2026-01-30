@@ -1730,16 +1730,14 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
                 f"➕ Добавлено: {amount:.2f} USDT\n"
                 f"💰 Новый баланс: {new_balance:.2f} USDT"
             )
-        elif action == "subtract":
-            new_balance = current_balance - amount
-            set_balance(target_user_id, new_balance)
+      elif action == "subtract":
+            await state.set_state(BetStates.admin_entering_balance)
             await message.answer(
-                f"<b>✅ Баланс вычтен</b>\n\n"
+                f"<b>➖ Вычитание баланса</b>\n\n"
                 f"ID: <code>{target_user_id}</code>\n"
-                f"➖ Вычтено: {amount:.2f} USDT\n"
-                f"💰 Новый баланс: {new_balance:.2f} USDT"
+                f"💰 Текущий баланс: {get_balance(target_user_id):.2f} USDT\n\n"
+                f"Введите сумму для вычитания:"
             )
-
     except ValueError:
         await message.answer("❌ Неверный формат суммы! Введите число.")
 
