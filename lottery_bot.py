@@ -1737,7 +1737,8 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
                 f"ID: <code>{target_user_id}</code>\n"
                 f"💰 Текущий баланс: {get_balance(target_user_id):.2f} USDT\n\n"
                 f"Введите сумму для вычитания:"
-            )
+             )
+            
     except ValueError:
         await message.answer("❌ Неверный формат суммы! Введите число.")
 
