@@ -1730,7 +1730,7 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
                 f"➕ Добавлено: {amount:.2f} USDT\n"
                 f"💰 Новый баланс: {new_balance:.2f} USDT"
             )
-      elif action == "subtract":
+        elif action == "subtract":
             await state.set_state(BetStates.admin_entering_balance)
             await message.answer(
                 f"<b>➖ Вычитание баланса</b>\n\n"
