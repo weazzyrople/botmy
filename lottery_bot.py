@@ -966,7 +966,8 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
             f"✅ Выигрыш: <b>+{profit:.2f} USDT</b>\n\n"
             f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
         )
-     
+
+    
         user = get_user(user_id)
         username = user[1] if user else ""
         first_name = user[2] if user else "Игрок"
@@ -988,7 +989,8 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
             f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>\n\n"
             f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
         )
-     
+
+        
         user = get_user(user_id)
         username = user[1] if user else ""
         first_name = user[2] if user else "Игрок"
