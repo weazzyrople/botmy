@@ -951,12 +951,12 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
     bet_config = BET_TYPES[game_id][bet_type]
     is_win = bet_config['check'](result_value)
     
-    if is_win:
+   if is_win:
         payout = bet_amount * bet_config['odds']
         profit = payout - bet_amount
         record_game(user_id, game_id, bet_type, bet_amount, result_value, True, payout)
         
-    await bot.send_message(
+        await bot.send_message(
             user_id,
             f"🎉 <b>ПОБЕДА!</b>\n\n"
             f"🎮 Игра: {game_data['name']}\n"
@@ -966,8 +966,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
             f"✅ Выигрыш: <b>+{profit:.2f} USDT</b>\n\n"
             f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
         )
-
-    
+        
         user = get_user(user_id)
         username = user[1] if user else ""
         first_name = user[2] if user else "Игрок"
@@ -989,7 +988,6 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
             f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>\n\n"
             f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
         )
-
         
         user = get_user(user_id)
         username = user[1] if user else ""
