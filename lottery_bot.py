@@ -956,7 +956,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
         profit = payout - bet_amount
         record_game(user_id, game_id, bet_type, bet_amount, result_value, True, payout)
         
-      await bot.send_message(
+    await bot.send_message(
             user_id,
             f"🎉 <b>ПОБЕДА!</b>\n\n"
             f"🎮 Игра: {game_data['name']}\n"
