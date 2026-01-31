@@ -951,7 +951,31 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
     bet_config = BET_TYPES[game_id][bet_type]
     is_win = bet_config['check'](result_value)
     
-   if is_win:
+  async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float, state: FSMContext):
+    game_data = GAMES[game_id]
+    dice_emoji = game_data['dice_emoji']
+    
+    dice_msg = await bot.send_dice(user_id, emoji=dice_emoji)
+    result_value = dice_msg.dice.value
+    
+    await asyncio.sleep(4)
+    
+    bet_config = BET_TYPES[game_id][bet_type]
+    is_win = bet_config['check'](result_value)
+    
+ async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float, state: FSMContext):
+    game_data = GAMES[game_id]
+    dice_emoji = game_data['dice_emoji']
+    
+    dice_msg = await bot.send_dice(user_id, emoji=dice_emoji)
+    result_value = dice_msg.dice.value
+    
+    await asyncio.sleep(4)
+    
+    bet_config = BET_TYPES[game_id][bet_type]
+    is_win = bet_config['check'](result_value)
+    
+    if is_win:
         payout = bet_amount * bet_config['odds']
         profit = payout - bet_amount
         record_game(user_id, game_id, bet_type, bet_amount, result_value, True, payout)
