@@ -939,7 +939,7 @@ async def auto_check_ton_payment(message: types.Message, user_id: int, payment_i
         await state.clear()
         return False
 
- async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float, state: FSMContext):
+async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float, state: FSMContext):
     game_data = GAMES[game_id]
     dice_emoji = game_data['dice_emoji']
     
