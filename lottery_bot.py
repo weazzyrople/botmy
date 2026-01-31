@@ -22,6 +22,7 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+STATS_CHANNEL_ID = -1003867480655
 
 BOT_TOKEN = os.getenv('BOT_TOKEN', '8285134993:AAG2KWUw-UEj7RqAv79PJgopKu1xueR5njU')
 CRYPTO_BOT_TOKEN = os.getenv('CRYPTO_BOT_TOKEN', '512423:AAjvv90onLsaYycj668hryY9Mrkd9wjJoNT')
@@ -56,6 +57,39 @@ def get_ton_price() -> float:
         logger.error(f"❌ Ошибка получения курса TON: {e}")
         return TON_TO_USDT_RATE
 
+async def post_game_to_channel(user_id: int, username: str, first_name: str, 
+                                game_type: str, bet_type: str, bet_amount: float, 
+                                result_value: int, is_win: bool, payout: float):
+    try:
+        game_emoji = GAMES[game_type]['emoji']
+        
+        if is_win:
+            profit = payout - bet_amount
+            text = (
+                f"🎉 <b>ВЫИГРЫШ!</b>\n\n"
+                f"{game_emoji} <b>{GAMES[game_type]['name']}</b>\n"
+                f"👤 Игрок: {first_name} (@{username or 'скрыто'})\n"
+                f"🎯 Ставка: {bet_type}\n"
+                f"🎲 Результат: {result_value}\n"
+                f"💰 Ставка: {bet_amount:.2f} USDT\n"
+                f"✅ Выигрыш: <b>+{profit:.2f} USDT</b>"
+            )
+        else:
+            text = (
+                f"😔 <b>Проигрыш</b>\n\n"
+                f"{game_emoji} <b>{GAMES[game_type]['name']}</b>\n"
+                f"👤 Игрок: {first_name} (@{username or 'скрыто'})\n"
+                f"🎯 Ставка: {bet_type}\n"
+                f"🎲 Результат: {result_value}\n"
+                f"💰 Ставка: {bet_amount:.2f} USDT\n"
+                f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>"
+            )
+        
+        await bot.send_message(STATS_CHANNEL_ID, text)
+        logger.info(f"✅ Игра опубликована в канал")
+    except Exception as e:
+        logger.error(f"❌ Ошибка публикации в канал: {e}")
+        
 class BetStates(StatesGroup):
     choosing_game = State()
     choosing_bet_type = State()
@@ -922,7 +956,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
         profit = payout - bet_amount
         record_game(user_id, game_id, bet_type, bet_amount, result_value, True, payout)
         
-        await bot.send_message(
+      await bot.send_message(
             user_id,
             f"🎉 <b>ПОБЕДА!</b>\n\n"
             f"🎮 Игра: {game_data['name']}\n"
@@ -931,6 +965,15 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
             f"💰 Ставка: {bet_amount:.2f} USDT\n"
             f"✅ Выигрыш: <b>+{profit:.2f} USDT</b>\n\n"
             f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
+        )
+     
+        user = get_user(user_id)
+        username = user[1] if user else ""
+        first_name = user[2] if user else "Игрок"
+        await post_game_to_channel(
+            user_id, username, first_name, 
+            game_id, bet_type, bet_amount, 
+            result_value, True, payout
         )
     else:
         record_game(user_id, game_id, bet_type, bet_amount, result_value, False, 0)
@@ -944,6 +987,15 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
             f"💰 Ставка: {bet_amount:.2f} USDT\n"
             f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>\n\n"
             f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
+        )
+     
+        user = get_user(user_id)
+        username = user[1] if user else ""
+        first_name = user[2] if user else "Игрок"
+        await post_game_to_channel(
+            user_id, username, first_name, 
+            game_id, bet_type, bet_amount, 
+            result_value, False, 0
         )
     
     await state.clear()
@@ -1721,6 +1773,7 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
                 f"ID: <code>{target_user_id}</code>\n"
                 f"💰 Новый баланс: {amount:.2f} USDT"
             )
+            await state.clear()
         elif action == "add":
             new_balance = current_balance + amount
             set_balance(target_user_id, new_balance)
@@ -1730,14 +1783,21 @@ async def process_admin_balance(message: types.Message, state: FSMContext):
                 f"➕ Добавлено: {amount:.2f} USDT\n"
                 f"💰 Новый баланс: {new_balance:.2f} USDT"
             )
+            await state.clear()
         elif action == "subtract":
-            await state.set_state(BetStates.admin_entering_balance)
+            new_balance = current_balance - amount
+            set_balance(target_user_id, new_balance)
             await message.answer(
-                f"<b>➖ Вычитание баланса</b>\n\n"
+                f"<b>✅ Баланс вычтен</b>\n\n"
                 f"ID: <code>{target_user_id}</code>\n"
-                f"💰 Текущий баланс: {get_balance(target_user_id):.2f} USDT\n\n"
-                f"Введите сумму для вычитания:"
-             )
+                f"➖ Вычтено: {amount:.2f} USDT\n"
+                f"💰 Новый баланс: {new_balance:.2f} USDT"
+            )
+            await state.clear()
+        
+    except ValueError:
+        await message.answer("❌ Неверный формат суммы! Введите число.")
+        await state.clear()
             
     except ValueError:
         await message.answer("❌ Неверный формат суммы! Введите число.")
