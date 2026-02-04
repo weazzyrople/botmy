@@ -1741,7 +1741,7 @@ async def process_admin_user_id(message: types.Message, state: FSMContext):
                 f"💰 Текущий баланс: {get_balance(target_user_id):.2f} USDT\n\n"
                 f"Введите сумму для вычитания:"
             )
-            await state.clear()
+           
         elif action == "set":
             await state.set_state(BetStates.admin_entering_balance)
             await message.answer(
