@@ -60,32 +60,58 @@ def get_ton_price() -> float:
 async def post_game_to_channel(user_id: int, username: str, first_name: str, 
                                 game_type: str, bet_type: str, bet_amount: float, 
                                 result_value: int, is_win: bool, payout: float):
+  
     try:
         game_emoji = GAMES[game_type]['emoji']
+        game_name = GAMES[game_type]['name']
+        
+        # Кнопка под постом
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎰 Сделать ставку", url="https://t.me/ffortunna_bot")]
+        ])
         
         if is_win:
             profit = payout - bet_amount
-            text = (
-                f"🎉 <b>ВЫИГРЫШ!</b>\n\n"
-                f"{game_emoji} <b>{GAMES[game_type]['name']}</b>\n"
-                f"👤 Игрок: {first_name} (@{username or 'скрыто'})\n"
-                f"🎯 Ставка: {bet_type}\n"
+            
+         
+            caption = (
+                f"🎉 <b>Вы выиграли игру!</b>\n\n"
+                f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
                 f"🎲 Результат: {result_value}\n"
                 f"💰 Ставка: {bet_amount:.2f} USDT\n"
-                f"✅ Выигрыш: <b>+{profit:.2f} USDT</b>"
+                f"💵 Сумма выигрыша <b>{profit:.2f} USDT</b> были зачислены на баланс в нашем боте\n\n"
+                f"👤 Игрок: {first_name}"
+            )
+            
+            # GIF выигрыша (замени на свой file_id после загрузки)
+            win_gif = "https://i.imgur.com/example_win.gif"  
+            
+            await bot.send_animation(
+                STATS_CHANNEL_ID,
+                animation=win_gif,
+                caption=caption,
+                reply_markup=keyboard
             )
         else:
-            text = (
-                f"😔 <b>Проигрыш</b>\n\n"
-                f"{game_emoji} <b>{GAMES[game_type]['name']}</b>\n"
-                f"👤 Игрок: {first_name} (@{username or 'скрыто'})\n"
-                f"🎯 Ставка: {bet_type}\n"
+            caption = (
+                f"❌ <b>Вы проиграли...</b>\n\n"
+                f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
                 f"🎲 Результат: {result_value}\n"
-                f"💰 Ставка: {bet_amount:.2f} USDT\n"
-                f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>"
+                f"💰 Ставка: {bet_amount:.2f} USDT\n\n"
+                f"📈 Не стоит расстраиваться, сыграй снова, и испытай свою удачу! Ты должен идти только вверх\n\n"
+                f"👤 Игрок: {first_name}"
+            )
+            
+            # GIF проигрыша (замени на свой file_id)
+            lose_gif = "https://i.imgur.com/example_lose.gif" 
+            
+            await bot.send_animation(
+                STATS_CHANNEL_ID,
+                animation=lose_gif,
+                caption=caption,
+                reply_markup=keyboard
             )
         
-        await bot.send_message(STATS_CHANNEL_ID, text)
         logger.info(f"✅ Игра опубликована в канал")
     except Exception as e:
         logger.error(f"❌ Ошибка публикации в канал: {e}")
@@ -104,7 +130,7 @@ class BetStates(StatesGroup):
     admin_creating_promo_amount = State()
     admin_creating_promo_uses = State()
     admin_broadcast = State()
-
+    admin_deposit_search = State()
 
 GAMES = {
     'dice': {'emoji': '🎲', 'name': 'Кубик', 'dice_emoji': DiceEmoji.DICE},
@@ -509,16 +535,18 @@ def delete_promocode(code: str):
 def main_keyboard():
     keyboard = [
         [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
-        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="🎁 Промокод")],
-        [KeyboardButton(text="👥 Рефералы"), KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
+        [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
+        [KeyboardButton(text="📊 Статистика")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 def admin_keyboard():
     keyboard = [
         [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
-        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="🎁 Промокод")],
-        [KeyboardButton(text="👥 Рефералы"), KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
+        [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
+        [KeyboardButton(text="📊 Статистика")],
         [KeyboardButton(text="⚙️ Админ панель")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -1208,7 +1236,19 @@ async def menu_deposit(message: types.Message, state: FSMContext):
         "💰 <b>Введите сумму пополнения (от 1 USDT):</b>\n\n"
         "<i>Примеры: 1 или 5 или 10 или 25</i>"
     )
-    
+
+@dp.message(F.text == "💸 Вывод")
+async def menu_withdraw(message: types.Message):
+    await message.answer(
+        "<b>💸 Вывод средств</b>\n\n"
+        "Для вывода средств обратитесь:\n"
+        "👤 @fortuna_viplati\n\n"
+        "Укажите:\n"
+        "• Ваш ID в боте\n"
+        "• Сумму вывода\n"
+        "⏱ Обработка заявок: 1-48 часа"
+    )
+
 @dp.message(F.text == "🎁 Промокод")
 async def menu_promocode(message: types.Message, state: FSMContext):
     await state.set_state(BetStates.entering_promocode)
@@ -2057,17 +2097,17 @@ async def process_ton_payment(callback: types.CallbackQuery, state: FSMContext):
     
     user_id = callback.from_user.id
     
-    # Получаем актуальный курс TON
+ 
     ton_rate = get_ton_price()
     
-    # Конвертируем USDT в TON по актуальному курсу
+ 
     amount_ton = amount_usdt / ton_rate
     amount_ton = round(amount_ton, 3)
     
-    # Генерируем уникальный комментарий для идентификации платежа
+   
     payment_id = f"pay{user_id}{int(datetime.now().timestamp())}"
     
-    # Сохраняем данные платежа
+ 
     await state.update_data(
         ton_payment_id=payment_id,
         ton_amount_usdt=amount_usdt,
@@ -2216,6 +2256,186 @@ async def cmd_ton_price(message: types.Message):
         f"• 100 USDT = <b>{100/current_price:.3f} TON</b>\n\n"
         f"<i>Курс обновляется при каждой оплате</i>"
     )
+
+@dp.callback_query(F.data == "admin_deposits")
+async def admin_deposits(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+  
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT t.id, t.user_id, t.type, t.amount, t.status, t.invoice_id, t.created_at, u.first_name, u.username
+        FROM transactions t
+        JOIN users u ON t.user_id = u.user_id
+        WHERE t.type IN ('deposit', 'promocode', 'referral_bonus')
+        ORDER BY t.created_at DESC
+        LIMIT 20
+    ''')
+    deposits = cursor.fetchall()
+    conn.close()
+    
+    if not deposits:
+        await callback.message.edit_text(
+            "<b>💳 История пополнений</b>\n\n"
+            "Пополнений пока нет.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
+            ])
+        )
+        await callback.answer()
+        return
+    
+    text = "<b>💳 Последние 20 пополнений:</b>\n\n"
+    
+    for deposit in deposits:
+        trans_id, user_id, trans_type, amount, status, invoice_id, created_at, first_name, username = deposit
+        
+        # Определяем способ пополнения
+        if invoice_id.startswith('stars_'):
+            method = "⭐ Stars"
+        elif invoice_id.startswith('ton_'):
+            method = "💠 TON"
+        elif invoice_id.startswith('promo_'):
+            method = "🎁 Промокод"
+        elif invoice_id.startswith('ref_'):
+            method = "👥 Реферал"
+        else:
+            method = "💎 Crypto"
+        
+       
+        status_emoji = "✅" if status == "completed" else "⏳"
+        
+      
+        try:
+            date = datetime.fromisoformat(created_at).strftime("%d.%m %H:%M")
+        except:
+            date = created_at[:16]
+        
+        text += (
+            f"{status_emoji} <b>ID #{trans_id}</b>\n"
+            f"👤 {first_name} (@{username or 'нет'}) | ID: <code>{user_id}</code>\n"
+            f"💰 Сумма: <b>{amount:.2f} USDT</b>\n"
+            f"💳 Способ: {method}\n"
+            f"📅 {date}\n\n"
+        )
+    
+    
+    buttons = [
+        [InlineKeyboardButton(text="🔍 Поиск по ID", callback_data="admin_deposit_search")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
+    ]
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_deposit_search")
+async def admin_deposit_search_start(callback: types.CallbackQuery, state: FSMContext):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    await state.set_state(BetStates.admin_deposit_search)
+    await callback.message.edit_text(
+        "<b>🔍 Поиск пополнений</b>\n\n"
+        "Введите Telegram ID пользователя:"
+    )
+    await callback.answer()
+
+
+@dp.message(BetStates.admin_deposit_search)
+async def admin_deposit_search_process(message: types.Message, state: FSMContext):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    
+    try:
+        user_id = int(message.text)
+        
+       
+        conn = sqlite3.connect('lottery_bot.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT t.id, t.type, t.amount, t.status, t.invoice_id, t.created_at, u.first_name, u.username
+            FROM transactions t
+            JOIN users u ON t.user_id = u.user_id
+            WHERE t.user_id = ? AND t.type IN ('deposit', 'promocode', 'referral_bonus')
+            ORDER BY t.created_at DESC
+        ''', (user_id,))
+        deposits = cursor.fetchall()
+        
+       
+        cursor.execute('SELECT balance, total_deposited FROM users WHERE user_id = ?', (user_id,))
+        user_data = cursor.fetchone()
+        conn.close()
+        
+        if not user_data:
+            await message.answer("❌ Пользователь не найден!")
+            await state.clear()
+            return
+        
+        balance, total_deposited = user_data
+        
+        if not deposits:
+            await message.answer(
+                f"<b>🔍 Пополнения пользователя</b>\n\n"
+                f"ID: <code>{user_id}</code>\n"
+                f"💰 Баланс: {balance:.2f} USDT\n"
+                f"📥 Всего пополнено: {total_deposited:.2f} USDT\n\n"
+                f"❌ Пополнений нет"
+            )
+            await state.clear()
+            return
+        
+        text = (
+            f"<b>🔍 Пополнения пользователя</b>\n\n"
+            f"👤 {deposits[0][6]} (@{deposits[0][7] or 'нет'})\n"
+            f"ID: <code>{user_id}</code>\n"
+            f"💰 Баланс: <b>{balance:.2f} USDT</b>\n"
+            f"📥 Всего пополнено: <b>{total_deposited:.2f} USDT</b>\n\n"
+            f"<b>История:</b>\n\n"
+        )
+        
+        for deposit in deposits:
+            trans_id, trans_type, amount, status, invoice_id, created_at, first_name, username = deposit
+            
+           
+            if invoice_id.startswith('stars_'):
+                method = "⭐ Stars"
+            elif invoice_id.startswith('ton_'):
+                method = "💠 TON"
+            elif invoice_id.startswith('promo_'):
+                method = "🎁 Промокод"
+            elif invoice_id.startswith('ref_'):
+                method = "👥 Реферал"
+            else:
+                method = "💎 Crypto"
+            
+            status_emoji = "✅" if status == "completed" else "⏳"
+            
+            try:
+                date = datetime.fromisoformat(created_at).strftime("%d.%m.%Y %H:%M")
+            except:
+                date = created_at[:19]
+            
+            text += (
+                f"{status_emoji} <b>{amount:.2f} USDT</b> | {method}\n"
+                f"📅 {date}\n\n"
+            )
+        
+        await message.answer(text)
+        await state.clear()
+        
+    except ValueError:
+        await message.answer("❌ Неверный формат ID! Введите число.")
+
+@dp.message(F.animation)
+async def get_gif_id(message: types.Message):
+    await message.answer(f"<b>GIF file_id:</b>\n<code>{message.animation.file_id}</code>")
 
 async def main():
     init_db()
