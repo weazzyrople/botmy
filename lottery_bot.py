@@ -591,18 +591,6 @@ def payment_method_keyboard(amount: float, purpose: str):
         [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def admin_panel_keyboard():
-    buttons = [
-        [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")],
-        [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin_users")],
-        [InlineKeyboardButton(text="💰 Управление балансами", callback_data="admin_balances")],
-        [InlineKeyboardButton(text="🎁 Управление промокодами", callback_data="admin_promocodes")],
-        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],  # ← ДОБАВЬ ЭТО
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
     
 def admin_balance_keyboard():
     buttons = [
