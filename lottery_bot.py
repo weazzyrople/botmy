@@ -60,7 +60,7 @@ def get_ton_price() -> float:
 async def post_game_to_channel(user_id: int, username: str, first_name: str, 
                                 game_type: str, bet_type: str, bet_amount: float, 
                                 result_value: int, is_win: bool, payout: float):
-  
+    """Постит результат игры в канал, копируя шаблон с премиум эмодзи"""
     try:
         game_emoji = GAMES[game_type]['emoji']
         game_name = GAMES[game_type]['name']
@@ -73,42 +73,48 @@ async def post_game_to_channel(user_id: int, username: str, first_name: str,
         if is_win:
             profit = payout - bet_amount
             
-         
-            caption = (
-                f"🎉 <b>Вы выиграли игру!</b>\n\n"
+            
+            await bot.copy_message(
+                chat_id=STATS_CHANNEL_ID,
+                from_chat_id=STATS_CHANNEL_ID,
+                message_id=WIN_TEMPLATE_MESSAGE_ID,
+                reply_markup=keyboard
+            )
+            
+        
+            details = (
                 f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
                 f"🎲 Результат: {result_value}\n"
                 f"💰 Ставка: {bet_amount:.2f} USDT\n"
-                f"💵 Сумма выигрыша <b>{profit:.2f} USDT</b> были зачислены на баланс в нашем боте\n\n"
+                f"💵 Выигрыш: <b>{profit:.2f} USDT</b>\n"
                 f"👤 Игрок: {first_name}"
             )
             
-            # GIF выигрыша (замени на свой file_id после загрузки)
-            win_gif = "https://i.imgur.com/example_win.gif"  
-            
-            await bot.send_animation(
+            await bot.send_message(
                 STATS_CHANNEL_ID,
-                animation=win_gif,
-                caption=caption,
+                details,
                 reply_markup=keyboard
             )
         else:
-            caption = (
-                f"❌ <b>Вы проиграли...</b>\n\n"
+           
+            await bot.copy_message(
+                chat_id=STATS_CHANNEL_ID,
+                from_chat_id=STATS_CHANNEL_ID,
+                message_id=LOSE_TEMPLATE_MESSAGE_ID,
+                reply_markup=keyboard
+            )
+            
+           
+            details = (
                 f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
                 f"🎲 Результат: {result_value}\n"
-                f"💰 Ставка: {bet_amount:.2f} USDT\n\n"
-                f"📈 Не стоит расстраиваться, сыграй снова, и испытай свою удачу! Ты должен идти только вверх\n\n"
+                f"💰 Потеря: {bet_amount:.2f} USDT\n"
                 f"👤 Игрок: {first_name}"
             )
             
-            # GIF проигрыша (замени на свой file_id)
-            lose_gif = "https://i.imgur.com/example_lose.gif" 
-            
-            await bot.send_animation(
+            await bot.send_message(
                 STATS_CHANNEL_ID,
-                animation=lose_gif,
-                caption=caption,
+                details,
                 reply_markup=keyboard
             )
         
