@@ -555,7 +555,7 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin_users")],
         [InlineKeyboardButton(text="💰 Управление балансами", callback_data="admin_balances")],
         [InlineKeyboardButton(text="🎁 Управление промокодами", callback_data="admin_promocodes")],
-        [InlineKeyboardButton(text="💳 История пополнений", callback_data="admin_deposits")], 
+        [InlineKeyboardButton(text="💳 История пополнений", callback_data="admin_deposits")],  
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
     ]
