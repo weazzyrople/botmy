@@ -23,6 +23,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 STATS_CHANNEL_ID = -1003867480655
+WIN_TEMPLATE_MESSAGE_ID = 123   # ← Замени на ID сообщения с победой
+LOSE_TEMPLATE_MESSAGE_ID = 456  # ← Замени на ID сообщения с проигрышем
 
 BOT_TOKEN = os.getenv('BOT_TOKEN', '8285134993:AAG2KWUw-UEj7RqAv79PJgopKu1xueR5njU')
 CRYPTO_BOT_TOKEN = os.getenv('CRYPTO_BOT_TOKEN', '512423:AAjvv90onLsaYycj668hryY9Mrkd9wjJoNT')
