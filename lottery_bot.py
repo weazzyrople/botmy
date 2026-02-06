@@ -541,15 +541,17 @@ def main_keyboard():
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
-def admin_keyboard():
-    keyboard = [
-        [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
-        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
-        [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
-        [KeyboardButton(text="📊 Статистика")],
-        [KeyboardButton(text="⚙️ Админ панель")],
+def admin_panel_keyboard():
+    buttons = [
+        [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin_users")],
+        [InlineKeyboardButton(text="💰 Управление балансами", callback_data="admin_balances")],
+        [InlineKeyboardButton(text="🎁 Управление промокодами", callback_data="admin_promocodes")],
+        [InlineKeyboardButton(text="💳 История пополнений", callback_data="admin_deposits")], 
+        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
     ]
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def games_keyboard():
     buttons = []
@@ -2257,83 +2259,6 @@ async def cmd_ton_price(message: types.Message):
         f"<i>Курс обновляется при каждой оплате</i>"
     )
 
-@dp.callback_query(F.data == "admin_deposits")
-async def admin_deposits(callback: types.CallbackQuery):
-    if callback.from_user.id not in ADMIN_IDS:
-        await callback.answer("⛔️ Нет доступа!", show_alert=True)
-        return
-    
-  
-    conn = sqlite3.connect('lottery_bot.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT t.id, t.user_id, t.type, t.amount, t.status, t.invoice_id, t.created_at, u.first_name, u.username
-        FROM transactions t
-        JOIN users u ON t.user_id = u.user_id
-        WHERE t.type IN ('deposit', 'promocode', 'referral_bonus')
-        ORDER BY t.created_at DESC
-        LIMIT 20
-    ''')
-    deposits = cursor.fetchall()
-    conn.close()
-    
-    if not deposits:
-        await callback.message.edit_text(
-            "<b>💳 История пополнений</b>\n\n"
-            "Пополнений пока нет.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
-            ])
-        )
-        await callback.answer()
-        return
-    
-    text = "<b>💳 Последние 20 пополнений:</b>\n\n"
-    
-    for deposit in deposits:
-        trans_id, user_id, trans_type, amount, status, invoice_id, created_at, first_name, username = deposit
-        
-        # Определяем способ пополнения
-        if invoice_id.startswith('stars_'):
-            method = "⭐ Stars"
-        elif invoice_id.startswith('ton_'):
-            method = "💠 TON"
-        elif invoice_id.startswith('promo_'):
-            method = "🎁 Промокод"
-        elif invoice_id.startswith('ref_'):
-            method = "👥 Реферал"
-        else:
-            method = "💎 Crypto"
-        
-       
-        status_emoji = "✅" if status == "completed" else "⏳"
-        
-      
-        try:
-            date = datetime.fromisoformat(created_at).strftime("%d.%m %H:%M")
-        except:
-            date = created_at[:16]
-        
-        text += (
-            f"{status_emoji} <b>ID #{trans_id}</b>\n"
-            f"👤 {first_name} (@{username or 'нет'}) | ID: <code>{user_id}</code>\n"
-            f"💰 Сумма: <b>{amount:.2f} USDT</b>\n"
-            f"💳 Способ: {method}\n"
-            f"📅 {date}\n\n"
-        )
-    
-    
-    buttons = [
-        [InlineKeyboardButton(text="🔍 Поиск по ID", callback_data="admin_deposit_search")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
-    ]
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-    )
-    await callback.answer()
-
 @dp.callback_query(F.data == "admin_deposit_search")
 async def admin_deposit_search_start(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id not in ADMIN_IDS:
@@ -2355,8 +2280,6 @@ async def admin_deposit_search_process(message: types.Message, state: FSMContext
     
     try:
         user_id = int(message.text)
-        
-       
         conn = sqlite3.connect('lottery_bot.db')
         cursor = conn.cursor()
         cursor.execute('''
@@ -2368,7 +2291,7 @@ async def admin_deposit_search_process(message: types.Message, state: FSMContext
         ''', (user_id,))
         deposits = cursor.fetchall()
         
-       
+      
         cursor.execute('SELECT balance, total_deposited FROM users WHERE user_id = ?', (user_id,))
         user_data = cursor.fetchone()
         conn.close()
@@ -2403,7 +2326,7 @@ async def admin_deposit_search_process(message: types.Message, state: FSMContext
         for deposit in deposits:
             trans_id, trans_type, amount, status, invoice_id, created_at, first_name, username = deposit
             
-           
+            # Определяем способ
             if invoice_id.startswith('stars_'):
                 method = "⭐ Stars"
             elif invoice_id.startswith('ton_'):
@@ -2432,6 +2355,80 @@ async def admin_deposit_search_process(message: types.Message, state: FSMContext
         
     except ValueError:
         await message.answer("❌ Неверный формат ID! Введите число.")
+
+@dp.callback_query(F.data == "admin_deposits")
+async def admin_deposits(callback: types.CallbackQuery):
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("⛔️ Нет доступа!", show_alert=True)
+        return
+    
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT t.id, t.user_id, t.type, t.amount, t.status, t.invoice_id, t.created_at, u.first_name, u.username
+        FROM transactions t
+        JOIN users u ON t.user_id = u.user_id
+        WHERE t.type IN ('deposit', 'promocode', 'referral_bonus')
+        ORDER BY t.created_at DESC
+        LIMIT 20
+    ''')
+    deposits = cursor.fetchall()
+    conn.close()
+    
+    if not deposits:
+        await callback.message.edit_text(
+            "<b>💳 История пополнений</b>\n\n"
+            "Пополнений пока нет.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
+            ])
+        )
+        await callback.answer()
+        return
+    
+    text = "<b>💳 Последние 20 пополнений:</b>\n\n"
+    
+    for deposit in deposits:
+        trans_id, user_id, trans_type, amount, status, invoice_id, created_at, first_name, username = deposit
+
+        if invoice_id.startswith('stars_'):
+            method = "⭐ Stars"
+        elif invoice_id.startswith('ton_'):
+            method = "💠 TON"
+        elif invoice_id.startswith('promo_'):
+            method = "🎁 Промокод"
+        elif invoice_id.startswith('ref_'):
+            method = "👥 Реферал"
+        else:
+            method = "💎 Crypto"
+
+        status_emoji = "✅" if status == "completed" else "⏳"
+
+        try:
+            date = datetime.fromisoformat(created_at).strftime("%d.%m %H:%M")
+        except:
+            date = created_at[:16]
+        
+        text += (
+            f"{status_emoji} <b>ID #{trans_id}</b>\n"
+            f"👤 {first_name} (@{username or 'нет'}) | ID: <code>{user_id}</code>\n"
+            f"💰 Сумма: <b>{amount:.2f} USDT</b>\n"
+            f"💳 Способ: {method}\n"
+            f"📅 {date}\n\n"
+        )
+    
+
+    buttons = [
+        [InlineKeyboardButton(text="🔍 Поиск по ID", callback_data="admin_deposit_search")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
+    ]
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+    )
+    await callback.answer()
+
 
 @dp.message(F.animation)
 async def get_gif_id(message: types.Message):
