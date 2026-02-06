@@ -2434,6 +2434,14 @@ async def admin_deposits(callback: types.CallbackQuery):
 async def get_gif_id(message: types.Message):
     await message.answer(f"<b>GIF file_id:</b>\n<code>{message.animation.file_id}</code>")
 
+@dp.channel_post()
+async def get_message_id(message: types.Message):
+    await bot.send_message(
+        ADMIN_IDS[0],  
+        f"Message ID: {message.message_id}\n"
+        f"Text: {message.text[:100] if message.text else 'No text'}"
+    )
+
 async def main():
     init_db()
     logger.info("🚀 Бот запущен!")
