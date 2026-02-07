@@ -507,7 +507,17 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-     
+
+def admin_balance_keyboard():
+    buttons = [
+        [InlineKeyboardButton(text="🔍 Проверить баланс", callback_data="admin_check_balance")],
+        [InlineKeyboardButton(text="➕ Добавить баланс", callback_data="admin_add_balance")],
+        [InlineKeyboardButton(text="➖ Вычесть баланс", callback_data="admin_subtract_balance")],
+        [InlineKeyboardButton(text="💰 Установить баланс", callback_data="admin_set_balance")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 def games_keyboard():
     buttons = []
     for game_id, game_data in GAMES.items():
