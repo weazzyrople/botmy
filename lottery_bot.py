@@ -476,6 +476,16 @@ def delete_promocode(code: str):
     cursor.execute('DELETE FROM promocodes WHERE code = ?', (code,))
     conn.commit()
     conn.close()
+    
+def admin_keyboard():
+    keyboard = [
+        [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
+        [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
+        [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
+        [KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="⚙️ Админ панель")],
+    ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 def main_keyboard():
     keyboard = [
@@ -484,6 +494,7 @@ def main_keyboard():
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📊 Статистика")],
     ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True) 
     
 def admin_panel_keyboard():
     buttons = [
