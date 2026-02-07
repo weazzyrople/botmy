@@ -485,7 +485,7 @@ def main_keyboard():
         [KeyboardButton(text="📊 Статистика")],
     ]
     
- def admin_panel_keyboard():
+def admin_panel_keyboard():
     buttons = [
         [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin_users")],
