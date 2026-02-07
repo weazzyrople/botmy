@@ -23,8 +23,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 STATS_CHANNEL_ID = -1003867480655
-WIN_TEMPLATE_MESSAGE_ID = 123   # ← Замени на ID сообщения с победой
-LOSE_TEMPLATE_MESSAGE_ID = 456  # ← Замени на ID сообщения с проигрышем
+WIN_TEMPLATE_MESSAGE_ID = 19 
+LOSE_TEMPLATE_MESSAGE_ID = 20  
 
 BOT_TOKEN = os.getenv('BOT_TOKEN', '8285134993:AAG2KWUw-UEj7RqAv79PJgopKu1xueR5njU')
 CRYPTO_BOT_TOKEN = os.getenv('CRYPTO_BOT_TOKEN', '512423:AAjvv90onLsaYycj668hryY9Mrkd9wjJoNT')
@@ -59,70 +59,7 @@ def get_ton_price() -> float:
         logger.error(f"❌ Ошибка получения курса TON: {e}")
         return TON_TO_USDT_RATE
 
-async def post_game_to_channel(user_id: int, username: str, first_name: str, 
-                                game_type: str, bet_type: str, bet_amount: float, 
-                                result_value: int, is_win: bool, payout: float):
-    """Постит результат игры в канал, копируя шаблон с премиум эмодзи"""
-    try:
-        game_emoji = GAMES[game_type]['emoji']
-        game_name = GAMES[game_type]['name']
-        
-        # Кнопка под постом
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎰 Сделать ставку", url="https://t.me/ffortunna_bot")]
-        ])
-        
-        if is_win:
-            profit = payout - bet_amount
-            
-            
-            await bot.copy_message(
-                chat_id=STATS_CHANNEL_ID,
-                from_chat_id=STATS_CHANNEL_ID,
-                message_id=WIN_TEMPLATE_MESSAGE_ID,
-                reply_markup=keyboard
-            )
-            
-        
-            details = (
-                f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
-                f"🎲 Результат: {result_value}\n"
-                f"💰 Ставка: {bet_amount:.2f} USDT\n"
-                f"💵 Выигрыш: <b>{profit:.2f} USDT</b>\n"
-                f"👤 Игрок: {first_name}"
-            )
-            
-            await bot.send_message(
-                STATS_CHANNEL_ID,
-                details,
-                reply_markup=keyboard
-            )
-        else:
-           
-            await bot.copy_message(
-                chat_id=STATS_CHANNEL_ID,
-                from_chat_id=STATS_CHANNEL_ID,
-                message_id=LOSE_TEMPLATE_MESSAGE_ID,
-                reply_markup=keyboard
-            )
-            
-           
-            details = (
-                f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
-                f"🎲 Результат: {result_value}\n"
-                f"💰 Потеря: {bet_amount:.2f} USDT\n"
-                f"👤 Игрок: {first_name}"
-            )
-            
-            await bot.send_message(
-                STATS_CHANNEL_ID,
-                details,
-                reply_markup=keyboard
-            )
-        
-        logger.info(f"✅ Игра опубликована в канал")
-    except Exception as e:
-        logger.error(f"❌ Ошибка публикации в канал: {e}")
+
         
 class BetStates(StatesGroup):
     choosing_game = State()
@@ -547,20 +484,19 @@ def main_keyboard():
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📊 Статистика")],
     ]
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
-
-def admin_panel_keyboard():
+    
+ def admin_panel_keyboard():
     buttons = [
         [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="👥 Все пользователи", callback_data="admin_users")],
         [InlineKeyboardButton(text="💰 Управление балансами", callback_data="admin_balances")],
         [InlineKeyboardButton(text="🎁 Управление промокодами", callback_data="admin_promocodes")],
-        [InlineKeyboardButton(text="💳 История пополнений", callback_data="admin_deposits")],  
+        [InlineKeyboardButton(text="💳 История пополнений", callback_data="admin_deposits")],
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
+     
 def games_keyboard():
     buttons = []
     for game_id, game_data in GAMES.items():
@@ -589,16 +525,6 @@ def payment_method_keyboard(amount: float, purpose: str):
         [InlineKeyboardButton(text="💎 Crypto (USDT)", callback_data=f"pay_crypto_{amount}_{purpose}")],
         [InlineKeyboardButton(text="💠 TON Wallet", callback_data=f"pay_ton_{amount}_{purpose}")],
         [InlineKeyboardButton(text="✖️ Отменить", callback_data="cancel_payment")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-    
-def admin_balance_keyboard():
-    buttons = [
-        [InlineKeyboardButton(text="🔍 Проверить баланс", callback_data="admin_check_balance")],
-        [InlineKeyboardButton(text="➕ Добавить баланс", callback_data="admin_add_balance")],
-        [InlineKeyboardButton(text="➖ Вычесть баланс", callback_data="admin_subtract_balance")],
-        [InlineKeyboardButton(text="💰 Установить баланс", callback_data="admin_set_balance")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
     
@@ -966,66 +892,146 @@ async def auto_check_ton_payment(message: types.Message, user_id: int, payment_i
         return False
 
 async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float, state: FSMContext):
+    """Проводит игру в канале с премиум эмодзи постами"""
     game_data = GAMES[game_id]
     dice_emoji = game_data['dice_emoji']
+    game_name = game_data['name']
+    game_emoji = game_data['emoji']
     
-    dice_msg = await bot.send_dice(user_id, emoji=dice_emoji)
+    # Получаем данные игрока
+    user = get_user(user_id)
+    first_name = user[2] if user else "Игрок"
+    username = user[1] if user else ""
+    
+  
+    announcement = await bot.send_message(
+        STATS_CHANNEL_ID,
+        f"🎯 <b>НОВАЯ СТАВКА!</b>\n\n"
+        f"{game_emoji} <b>{game_name}</b>\n"
+        f"👤 Игрок: {first_name}\n"
+        f"🎲 Ставка: {bet_type}\n"
+        f"💰 Сумма: {bet_amount:.2f} USDT\n\n"
+        f"⏳ Бросаем..."
+    )
+    
+  
+    channel_link = f"https://t.me/c/{str(STATS_CHANNEL_ID)[4:]}/{announcement.message_id}"
+    
+    # 2. УВЕДОМЛЕНИЕ ИГРОКУ С ССЫЛКОЙ НА КАНАЛ
+    await bot.send_message(
+        user_id,
+        f"✅ <b>Ставка принята!</b>\n\n"
+        f"🎮 Игра: {game_name}\n"
+        f"🎯 Ставка: {bet_type}\n"
+        f"💰 Сумма: {bet_amount:.2f} USDT\n\n"
+        f"📺 <b>Следи за ставкой в канале:</b>\n"
+        f"👉 {channel_link}\n\n"
+        f"⏳ Ожидай результат...",
+        disable_web_page_preview=True
+    )
+    
+    await asyncio.sleep(2)
+    
+ 
+    dice_msg = await bot.send_dice(STATS_CHANNEL_ID, emoji=dice_emoji)
     result_value = dice_msg.dice.value
     
+ 
+    await bot.send_dice(user_id, emoji=dice_emoji)
+    
+   
     await asyncio.sleep(4)
     
+    # 4. ОПРЕДЕЛЯЕМ РЕЗУЛЬТАТ
     bet_config = BET_TYPES[game_id][bet_type]
     is_win = bet_config['check'](result_value)
+    
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎰 Сделать ставку", url="https://t.me/ffortunna_bot")]
+    ])
     
     if is_win:
         payout = bet_amount * bet_config['odds']
         profit = payout - bet_amount
+        
+      
         record_game(user_id, game_id, bet_type, bet_amount, result_value, True, payout)
         
+        # 🎉 КОПИРУЕМ ПОСТ С ПРЕМИУМ ЭМОДЗИ ДЛЯ ПОБЕДЫ
+        try:
+            await bot.copy_message(
+                chat_id=STATS_CHANNEL_ID,
+                from_chat_id=STATS_CHANNEL_ID,
+                message_id=WIN_TEMPLATE_MESSAGE_ID,
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось скопировать шаблон победы: {e}")
+        
+       
+        await bot.send_message(
+            STATS_CHANNEL_ID,
+            f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
+            f"🎲 Результат: <b>{result_value}</b> ✅\n"
+            f"💰 Ставка: {bet_amount:.2f} USDT\n"
+            f"💵 Выигрыш: <b>+{profit:.2f} USDT</b>\n"
+            f"👤 Игрок: {first_name}",
+            reply_markup=keyboard
+        )
+        
+       
         await bot.send_message(
             user_id,
             f"🎉 <b>ПОБЕДА!</b>\n\n"
-            f"🎮 Игра: {game_data['name']}\n"
+            f"🎮 Игра: {game_name}\n"
             f"🎯 Ставка: {bet_type}\n"
             f"🎲 Результат: {result_value}\n"
             f"💰 Ставка: {bet_amount:.2f} USDT\n"
             f"✅ Выигрыш: <b>+{profit:.2f} USDT</b>\n\n"
-            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
+            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>\n\n"
+            f"📺 Твоя победа опубликована в канале!"
         )
         
-        user = get_user(user_id)
-        username = user[1] if user else ""
-        first_name = user[2] if user else "Игрок"
-        await post_game_to_channel(
-            user_id, username, first_name, 
-            game_id, bet_type, bet_amount, 
-            result_value, True, payout
-        )
     else:
+     
         record_game(user_id, game_id, bet_type, bet_amount, result_value, False, 0)
         
+        # 😔 КОПИРУЕМ ПОСТ С ПРЕМИУМ ЭМОДЗИ ДЛЯ ПРОИГРЫША
+        try:
+            await bot.copy_message(
+                chat_id=STATS_CHANNEL_ID,
+                from_chat_id=STATS_CHANNEL_ID,
+                message_id=LOSE_TEMPLATE_MESSAGE_ID,
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось скопировать шаблон проигрыша: {e}")
+        
+        
+        await bot.send_message(
+            STATS_CHANNEL_ID,
+            f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
+            f"🎲 Результат: <b>{result_value}</b> ❌\n"
+            f"💰 Потеря: {bet_amount:.2f} USDT\n"
+            f"👤 Игрок: {first_name}",
+            reply_markup=keyboard
+        )
+        
+      
         await bot.send_message(
             user_id,
             f"😔 <b>Проигрыш</b>\n\n"
-            f"🎮 Игра: {game_data['name']}\n"
+            f"🎮 Игра: {game_name}\n"
             f"🎯 Ставка: {bet_type}\n"
             f"🎲 Результат: {result_value}\n"
             f"💰 Ставка: {bet_amount:.2f} USDT\n"
             f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>\n\n"
-            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
-        )
-        
-        user = get_user(user_id)
-        username = user[1] if user else ""
-        first_name = user[2] if user else "Игрок"
-        await post_game_to_channel(
-            user_id, username, first_name, 
-            game_id, bet_type, bet_amount, 
-            result_value, False, 0
+            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>\n\n"
+            f"🎯 Попробуй еще раз!"
         )
     
     await state.clear()
-
 
 @dp.pre_checkout_query()
 async def process_pre_checkout_query(pre_checkout_query: types.PreCheckoutQuery):
