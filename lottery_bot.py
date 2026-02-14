@@ -166,6 +166,7 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS promocodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,6 +177,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS promocode_uses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,6 +188,7 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (user_id)
         )
     ''')
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS referrals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,9 +200,7 @@ def init_db():
             FOREIGN KEY (referrer_id) REFERENCES users (user_id)
         )
     ''')
-    conn.commit()
-    conn.close()
-
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS duels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -219,11 +220,8 @@ def init_db():
     ''')
     
     conn.commit()
-    conn.close()
-
-
-
-
+    conn.close() 
+    
 def get_user(user_id: int):
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
