@@ -76,7 +76,10 @@ class BetStates(StatesGroup):
     admin_creating_promo_uses = State()
     admin_broadcast = State()
     admin_deposit_search = State()
-
+    duel_choosing_game = State()
+    duel_entering_amount = State()
+    duel_waiting_opponent = State() 
+    
 GAMES = {
     'dice': {'emoji': '🎲', 'name': 'Кубик', 'dice_emoji': DiceEmoji.DICE},
     'basketball': {'emoji': '🏀', 'name': 'Баскетбол', 'dice_emoji': DiceEmoji.BASKETBALL},
@@ -196,6 +199,29 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS duels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            creator_id INTEGER,
+            opponent_id INTEGER,
+            game_type TEXT,
+            bet_amount REAL,
+            status TEXT DEFAULT 'waiting',
+            creator_result INTEGER,
+            opponent_result INTEGER,
+            winner_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            finished_at TIMESTAMP,
+            FOREIGN KEY (creator_id) REFERENCES users (user_id),
+            FOREIGN KEY (opponent_id) REFERENCES users (user_id)
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+
 
 
 def get_user(user_id: int):
@@ -469,6 +495,103 @@ def get_referrals_list(user_id: int):
     refs = cursor.fetchall()
     conn.close()
     return refs
+    
+def create_duel(creator_id: int, game_type: str, bet_amount: float):
+    """Создать новую дуэль"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO duels (creator_id, game_type, bet_amount, status)
+        VALUES (?, ?, ?, 'waiting')
+    ''', (creator_id, game_type, bet_amount))
+    duel_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return duel_id
+
+def get_open_duels():
+    """Получить список открытых дуэлей"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT d.id, d.creator_id, u.first_name, u.username, d.game_type, d.bet_amount, d.created_at
+        FROM duels d
+        JOIN users u ON d.creator_id = u.user_id
+        WHERE d.status = 'waiting'
+        ORDER BY d.created_at DESC
+        LIMIT 10
+    ''')
+    duels = cursor.fetchall()
+    conn.close()
+    return duels
+
+def get_duel(duel_id: int):
+    """Получить информацию о дуэли"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM duels WHERE id = ?', (duel_id,))
+    duel = cursor.fetchone()
+    conn.close()
+    return duel
+
+def accept_duel(duel_id: int, opponent_id: int):
+    """Принять дуэль"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE duels 
+        SET opponent_id = ?, status = 'in_progress'
+        WHERE id = ? AND status = 'waiting'
+    ''', (opponent_id, duel_id))
+    success = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return success
+
+
+def cancel_duel(duel_id: int):
+    """Отменить дуэль"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE duels 
+        SET status = 'cancelled'
+        WHERE id = ? AND status = 'waiting'
+    ''', (duel_id,))
+    success = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return success
+
+
+def finish_duel(duel_id: int, creator_result: int, opponent_result: int, winner_id: int):
+    """Завершить дуэль"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE duels 
+        SET creator_result = ?, opponent_result = ?, winner_id = ?, 
+            status = 'finished', finished_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ''', (creator_result, opponent_result, winner_id, duel_id))
+    conn.commit()
+    conn.close()
+
+
+def get_user_duels(user_id: int, limit: int = 10):
+    """Получить дуэли пользователя"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM duels 
+        WHERE creator_id = ? OR opponent_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+    ''', (user_id, user_id, limit))
+    duels = cursor.fetchall()
+    conn.close()
+    return duels
+
 
 def delete_promocode(code: str):
     conn = sqlite3.connect('lottery_bot.db')
@@ -479,22 +602,22 @@ def delete_promocode(code: str):
     
 def admin_keyboard():
     keyboard = [
-        [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
+        [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="⚔️ Дуэли")],
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
-        [KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="👤 Профиль")],
         [KeyboardButton(text="⚙️ Админ панель")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 def main_keyboard():
     keyboard = [
-        [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="👤 Мой профиль")],
+        [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="⚔️ Дуэли")],
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
-        [KeyboardButton(text="📊 Статистика")],
+        [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="👤 Профиль")],
     ]
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True) 
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
     
 def admin_panel_keyboard():
     buttons = [
@@ -557,6 +680,67 @@ def admin_promocode_keyboard():
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_admin_panel")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def duels_menu_keyboard():
+    """Главное меню дуэлей"""
+    buttons = [
+        [InlineKeyboardButton(text="⚔️ Создать дуэль", callback_data="duel_create")],
+        [InlineKeyboardButton(text="🎯 Найти дуэль", callback_data="duel_find")],
+        [InlineKeyboardButton(text="📜 Мои дуэли", callback_data="duel_my")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def duel_games_keyboard():
+    """Выбор игры для дуэли"""
+    buttons = []
+    for game_id, game_data in GAMES.items():
+        emoji = game_data['emoji']
+        name = game_data['name']
+        buttons.append([InlineKeyboardButton(
+            text=f"{emoji} {name}", 
+            callback_data=f"duel_game_{game_id}"
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="duel_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def open_duels_keyboard(duels):
+    """Список открытых дуэлей"""
+    buttons = []
+    
+    for duel in duels:
+        duel_id, creator_id, first_name, username, game_type, bet_amount, created_at = duel
+        game_emoji = GAMES[game_type]['emoji']
+        game_name = GAMES[game_type]['name']
+        
+        buttons.append([InlineKeyboardButton(
+            text=f"{game_emoji} {game_name} | {bet_amount} USDT | vs {first_name}",
+            callback_data=f"duel_accept_{duel_id}"
+        )])
+    
+    if not buttons:
+        buttons.append([InlineKeyboardButton(
+            text="😔 Нет доступных дуэлей",
+            callback_data="duel_menu"
+        )])
+    
+    buttons.append([InlineKeyboardButton(text="🔄 Обновить", callback_data="duel_find")])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="duel_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def duel_action_keyboard(duel_id: int):
+    """Действия с дуэлью"""
+    buttons = [
+        [InlineKeyboardButton(text="❌ Отменить дуэль", callback_data=f"duel_cancel_{duel_id}")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="duel_menu")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+
 
 async def create_invoice(amount: float, description: str):
     import aiohttp
@@ -911,9 +1095,8 @@ async def auto_check_ton_payment(message: types.Message, user_id: int, payment_i
         
         await state.clear()
         return False
-
 async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float, state: FSMContext):
-    """Проводит игру в канале с премиум эмодзи постами"""
+    """Проводит игру в канале"""
     game_data = GAMES[game_id]
     dice_emoji = game_data['dice_emoji']
     game_name = game_data['name']
@@ -924,7 +1107,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
     first_name = user[2] if user else "Игрок"
     username = user[1] if user else ""
     
-  
+    # 1. ОБЪЯВЛЕНИЕ СТАВКИ В КАНАЛЕ
     announcement = await bot.send_message(
         STATS_CHANNEL_ID,
         f"🎯 <b>НОВАЯ СТАВКА!</b>\n\n"
@@ -935,10 +1118,10 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
         f"⏳ Бросаем..."
     )
     
-  
+    # Ссылка на пост в канале
     channel_link = f"https://t.me/c/{str(STATS_CHANNEL_ID)[4:]}/{announcement.message_id}"
     
-    # 2. УВЕДОМЛЕНИЕ ИГРОКУ С ССЫЛКОЙ НА КАНАЛ
+    # 2. УВЕДОМЛЕНИЕ ИГРОКУ С ССЫЛКОЙ
     await bot.send_message(
         user_id,
         f"✅ <b>Ставка принята!</b>\n\n"
@@ -953,55 +1136,48 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
     
     await asyncio.sleep(2)
     
- 
+    # 3. БРОСАЕМ КУБИК В КАНАЛЕ
     dice_msg = await bot.send_dice(STATS_CHANNEL_ID, emoji=dice_emoji)
     result_value = dice_msg.dice.value
     
- 
+    # Также дублируем кубик игроку
     await bot.send_dice(user_id, emoji=dice_emoji)
     
-   
+    # Ждём анимацию
     await asyncio.sleep(4)
     
     # 4. ОПРЕДЕЛЯЕМ РЕЗУЛЬТАТ
     bet_config = BET_TYPES[game_id][bet_type]
     is_win = bet_config['check'](result_value)
     
-
+    # Кнопка под постом
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎰 Сделать ставку", url="https://t.me/ffortunna_bot")]
     ])
     
+    # 5. ПУБЛИКУЕМ РЕЗУЛЬТАТ (ОДИН РАЗ, БЕЗ ДУБЛЕЙ)
     if is_win:
         payout = bet_amount * bet_config['odds']
         profit = payout - bet_amount
         
-      
+        # Записываем игру
         record_game(user_id, game_id, bet_type, bet_amount, result_value, True, payout)
         
-        # 🎉 КОПИРУЕМ ПОСТ С ПРЕМИУМ ЭМОДЗИ ДЛЯ ПОБЕДЫ
-        try:
-            await bot.copy_message(
-                chat_id=STATS_CHANNEL_ID,
-                from_chat_id=STATS_CHANNEL_ID,
-                message_id=WIN_TEMPLATE_MESSAGE_ID,
-                reply_markup=keyboard
-            )
-        except Exception as e:
-            logger.warning(f"⚠️ Не удалось скопировать шаблон победы: {e}")
-        
-       
+        # РЕЗУЛЬТАТ В КАНАЛЕ (ОДИН ПОСТ)
         await bot.send_message(
             STATS_CHANNEL_ID,
+            f"🎉🎉🎉 <b>ПОБЕДА!</b> 🎉🎉🎉\n\n"
+            f"💰💰💰 КРУПНЫЙ ВЫИГРЫШ! 💰💰💰\n\n"
             f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
             f"🎲 Результат: <b>{result_value}</b> ✅\n"
             f"💰 Ставка: {bet_amount:.2f} USDT\n"
             f"💵 Выигрыш: <b>+{profit:.2f} USDT</b>\n"
-            f"👤 Игрок: {first_name}",
+            f"👤 Игрок: {first_name}\n\n"
+            f"🔥 Хочешь так же? Жми кнопку! 👇",
             reply_markup=keyboard
         )
         
-       
+        # РЕЗУЛЬТАТ ИГРОКУ
         await bot.send_message(
             user_id,
             f"🎉 <b>ПОБЕДА!</b>\n\n"
@@ -1010,36 +1186,27 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
             f"🎲 Результат: {result_value}\n"
             f"💰 Ставка: {bet_amount:.2f} USDT\n"
             f"✅ Выигрыш: <b>+{profit:.2f} USDT</b>\n\n"
-            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>\n\n"
-            f"📺 Твоя победа опубликована в канале!"
+            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
         )
         
     else:
-     
+        # Записываем игру
         record_game(user_id, game_id, bet_type, bet_amount, result_value, False, 0)
         
-        # 😔 КОПИРУЕМ ПОСТ С ПРЕМИУМ ЭМОДЗИ ДЛЯ ПРОИГРЫША
-        try:
-            await bot.copy_message(
-                chat_id=STATS_CHANNEL_ID,
-                from_chat_id=STATS_CHANNEL_ID,
-                message_id=LOSE_TEMPLATE_MESSAGE_ID,
-                reply_markup=keyboard
-            )
-        except Exception as e:
-            logger.warning(f"⚠️ Не удалось скопировать шаблон проигрыша: {e}")
-        
-        
+        # РЕЗУЛЬТАТ В КАНАЛЕ (ОДИН ПОСТ)
         await bot.send_message(
             STATS_CHANNEL_ID,
+            f"😔 <b>Проигрыш</b>\n\n"
+            f"💔 Не повезло в этот раз...\n\n"
             f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
             f"🎲 Результат: <b>{result_value}</b> ❌\n"
             f"💰 Потеря: {bet_amount:.2f} USDT\n"
-            f"👤 Игрок: {first_name}",
+            f"👤 Игрок: {first_name}\n\n"
+            f"🎯 Попробуй еще раз! Удача рядом! 🍀",
             reply_markup=keyboard
         )
         
-      
+        # РЕЗУЛЬТАТ ИГРОКУ
         await bot.send_message(
             user_id,
             f"😔 <b>Проигрыш</b>\n\n"
@@ -1048,8 +1215,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
             f"🎲 Результат: {result_value}\n"
             f"💰 Ставка: {bet_amount:.2f} USDT\n"
             f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>\n\n"
-            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>\n\n"
-            f"🎯 Попробуй еще раз!"
+            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>"
         )
     
     await state.clear()
@@ -2465,6 +2631,411 @@ async def get_message_id(message: types.Message):
         f"Text: {message.text[:100] if message.text else 'No text'}"
     )
 
+@dp.message(F.text == "⚔️ Дуэли")
+async def menu_duels(message: types.Message):
+    await message.answer(
+        "<b>⚔️ ДУЭЛИ</b>\n\n"
+        "Сразись с другим игроком!\n\n"
+        "🎯 <b>Как играть:</b>\n"
+        "1. Создай дуэль или прими чужую\n"
+        "2. Оба игрока бросают кубик\n"
+        "3. У кого выше результат - тот забирает банк!\n\n"
+        "💰 <b>Комиссия:</b> 10% от банка\n"  # ← ИЗМЕНЕНО
+        "📊 <b>Пример:</b> Ставка 10 USDT, банк 20 USDT\n"
+        "   Победитель получает: 18 USDT (20 - 10% = 18)",
+        reply_markup=duels_menu_keyboard()
+    )
+
+
+@dp.callback_query(F.data == "duel_create")
+async def duel_create_start(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(BetStates.duel_choosing_game)
+    await callback.message.edit_text(
+        "<b>⚔️ Создание дуэли</b>\n\n"
+        "Выбери игру:",
+        reply_markup=duel_games_keyboard()
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("duel_game_"))
+async def duel_game_selected(callback: types.CallbackQuery, state: FSMContext):
+    game_id = callback.data.replace("duel_game_", "")
+    await state.update_data(duel_game_id=game_id)
+    await state.set_state(BetStates.duel_entering_amount)
+    
+    game_name = GAMES[game_id]['name']
+    game_emoji = GAMES[game_id]['emoji']
+    
+    await callback.message.edit_text(
+        f"<b>⚔️ Создание дуэли</b>\n\n"
+        f"{game_emoji} <b>{game_name}</b>\n\n"
+        f"💰 Введи сумму ставки (от 1 USDT):\n\n"
+        f"<i>Пример: 5 или 10 или 25</i>"
+    )
+    await callback.answer()
+
+@dp.message(BetStates.duel_entering_amount)
+async def duel_amount_entered(message: types.Message, state: FSMContext):
+    try:
+        amount = float(message.text.replace(',', '.'))
+        if amount < 1:
+            await message.answer("❌ Минимальная ставка - 1 USDT")
+            return
+        
+        user_id = message.from_user.id
+        balance = get_balance(user_id)
+        
+        if balance < amount:
+            await message.answer(
+                f"❌ <b>Недостаточно средств!</b>\n\n"
+                f"Ваш баланс: {balance:.2f} USDT\n"
+                f"Нужно: {amount:.2f} USDT"
+            )
+            await state.clear()
+            return
+        
+        data = await state.get_data()
+        game_id = data['duel_game_id']
+        
+        # Списываем ставку
+        update_balance(user_id, -amount)
+        
+        # Создаём дуэль
+        duel_id = create_duel(user_id, game_id, amount)
+        
+        game_name = GAMES[game_id]['name']
+        game_emoji = GAMES[game_id]['emoji']
+        
+        # Публикуем в канал
+        await bot.send_message(
+            STATS_CHANNEL_ID,
+            f"⚔️ <b>НОВАЯ ДУЭЛЬ!</b>\n\n"
+            f"{game_emoji} <b>{game_name}</b>\n"
+            f"💰 Ставка: {amount} USDT\n"
+            f"🏆 Банк: {amount * 2} USDT\n"
+            f"👤 Создал: {message.from_user.first_name}\n\n"
+            f"⏳ Ищем соперника...",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⚔️ Принять вызов", url="https://t.me/ffortunna_bot?start=duel")]
+            ])
+        )
+        
+        await message.answer(
+            f"✅ <b>Дуэль создана!</b>\n\n"
+            f"🆔 ID дуэли: #{duel_id}\n"
+            f"{game_emoji} Игра: {game_name}\n"
+            f"💰 Ставка: {amount} USDT\n"
+            f"🏆 Банк: {amount * 2} USDT\n\n"
+            f"⏳ Ожидаем соперника...\n"
+            f"📢 Дуэль опубликована в канале!",
+            reply_markup=duel_action_keyboard(duel_id)
+        )
+        
+        await state.clear()
+        
+    except ValueError:
+        await message.answer("❌ Введи число! Например: 5 или 10")
+
+
+# 3. ПОИСК ДУЭЛЕЙ
+@dp.callback_query(F.data == "duel_find")
+async def duel_find(callback: types.CallbackQuery):
+    duels = get_open_duels()
+    
+    if not duels:
+        await callback.message.edit_text(
+            "<b>🎯 Найти дуэль</b>\n\n"
+            "😔 Нет доступных дуэлей\n\n"
+            "Создай свою дуэль первым!",
+            reply_markup=duels_menu_keyboard()
+        )
+    else:
+        await callback.message.edit_text(
+            f"<b>🎯 Открытые дуэли ({len(duels)})</b>\n\n"
+            f"Выбери дуэль чтобы принять вызов:",
+            reply_markup=open_duels_keyboard(duels)
+        )
+    
+    await callback.answer()
+
+
+# 4. ПРИНЯТИЕ ДУЭЛИ
+@dp.callback_query(F.data.startswith("duel_accept_"))
+async def duel_accept(callback: types.CallbackQuery, state: FSMContext):
+    duel_id = int(callback.data.replace("duel_accept_", ""))
+    user_id = callback.from_user.id
+    
+    # Получаем инфо о дуэли
+    duel = get_duel(duel_id)
+    
+    if not duel:
+        await callback.answer("❌ Дуэль не найдена!", show_alert=True)
+        return
+    
+    duel_data = {
+        'id': duel[0],
+        'creator_id': duel[1],
+        'game_type': duel[3],
+        'bet_amount': duel[4],
+        'status': duel[5]
+    }
+    
+    # Проверки
+    if duel_data['status'] != 'waiting':
+        await callback.answer("❌ Дуэль уже занята!", show_alert=True)
+        return
+    
+    if duel_data['creator_id'] == user_id:
+        await callback.answer("❌ Нельзя принять свою дуэль!", show_alert=True)
+        return
+    
+    balance = get_balance(user_id)
+    if balance < duel_data['bet_amount']:
+        await callback.answer(
+            f"❌ Недостаточно средств! Нужно {duel_data['bet_amount']} USDT",
+            show_alert=True
+        )
+        return
+    
+    # Принимаем дуэль
+    success = accept_duel(duel_id, user_id)
+    
+    if not success:
+        await callback.answer("❌ Дуэль уже занята!", show_alert=True)
+        return
+    
+    # Списываем ставку
+    update_balance(user_id, -duel_data['bet_amount'])
+    
+    # Запускаем дуэль!
+    await start_duel_game(callback.message, duel_id, state)
+    await callback.answer()
+
+
+# 5. ПРОЦЕСС ДУЭЛИ
+async def start_duel_game(message: types.Message, duel_id: int, state: FSMContext):
+    duel = get_duel(duel_id)
+    
+    creator_id = duel[1]
+    opponent_id = duel[2]
+    game_type = duel[3]
+    bet_amount = duel[4]
+    
+    game_data = GAMES[game_type]
+    dice_emoji = game_data['dice_emoji']
+    game_name = game_data['name']
+    game_emoji = game_data['emoji']
+    
+    # Получаем имена
+    creator = get_user(creator_id)
+    opponent = get_user(opponent_id)
+    creator_name = creator[2]
+    opponent_name = opponent[2]
+    
+    # Объявление в канале
+    await bot.send_message(
+        STATS_CHANNEL_ID,
+        f"⚔️ <b>ДУЭЛЬ НАЧАЛАСЬ!</b>\n\n"
+        f"{game_emoji} <b>{game_name}</b>\n"
+        f"💰 Банк: {bet_amount * 2} USDT\n\n"
+        f"👤 {creator_name} VS {opponent_name}\n\n"
+        f"⏳ Бросаем кубики..."
+    )
+    
+    await asyncio.sleep(2)
+    
+    # Бросаем кубики В КАНАЛЕ
+    dice1 = await bot.send_dice(STATS_CHANNEL_ID, emoji=dice_emoji)
+    creator_result = dice1.dice.value
+    
+    await asyncio.sleep(1)
+    
+    dice2 = await bot.send_dice(STATS_CHANNEL_ID, emoji=dice_emoji)
+    opponent_result = dice2.dice.value
+    
+    # Ждём анимацию
+    await asyncio.sleep(4)
+    
+    # Определяем победителя
+    if creator_result > opponent_result:
+        winner_id = creator_id
+        winner_name = creator_name
+        loser_name = opponent_name
+    elif opponent_result > creator_result:
+        winner_id = opponent_id
+        winner_name = opponent_name
+        loser_name = creator_name
+    else:
+        # Ничья - возвращаем ставки
+        update_balance(creator_id, bet_amount)
+        update_balance(opponent_id, bet_amount)
+        
+        finish_duel(duel_id, creator_result, opponent_result, None)
+        
+        await bot.send_message(
+            STATS_CHANNEL_ID,
+            f"🤝 <b>НИЧЬЯ!</b>\n\n"
+            f"{game_emoji} <b>{game_name}</b>\n"
+            f"🎲 {creator_name}: {creator_result}\n"
+            f"🎲 {opponent_name}: {opponent_result}\n\n"
+            f"💰 Ставки возвращены игрокам"
+        )
+        
+        # Уведомляем игроков
+        for player_id in [creator_id, opponent_id]:
+            await bot.send_message(
+                player_id,
+                f"🤝 <b>Ничья в дуэли!</b>\n\n"
+                f"Результат: {creator_result} = {opponent_result}\n"
+                f"💰 Ставка возвращена: {bet_amount} USDT"
+            )
+        return
+    
+    # Начисляем выигрыш (банк минус 5% комиссия)
+    total_bank = bet_amount * 2
+    commission = total_bank * 0.10
+    payout = total_bank - commission
+    
+    update_balance(winner_id, payout)
+    
+    # Записываем результат
+    finish_duel(duel_id, creator_result, opponent_result, winner_id)
+    
+    # Объявление в канале
+    await bot.send_message(
+        STATS_CHANNEL_ID,
+        f"🏆 <b>ПОБЕДА!</b>\n\n"
+        f"{game_emoji} <b>{game_name}</b>\n"
+        f"🎲 {creator_name}: {creator_result}\n"
+        f"🎲 {opponent_name}: {opponent_result}\n\n"
+        f"👑 Победитель: <b>{winner_name}</b>\n"
+        f"💰 Выигрыш: <b>{payout:.2f} USDT</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⚔️ Создать дуэль", url="https://t.me/ffortunna_bot")]
+        ])
+    )
+    
+    # Уведомляем победителя
+    await bot.send_message(
+        winner_id,
+        f"🏆 <b>ТЫ ПОБЕДИЛ!</b>\n\n"
+        f"{game_emoji} Дуэль #{duel_id}\n"
+        f"🎲 Твой результат: {creator_result if winner_id == creator_id else opponent_result}\n"
+        f"🎲 Соперник: {opponent_result if winner_id == creator_id else creator_result}\n\n"
+        f"💰 Выигрыш: <b>+{payout:.2f} USDT</b>\n"
+        f"💵 Баланс: <b>{get_balance(winner_id):.2f} USDT</b>"
+    )
+    
+    # Уведомляем проигравшего
+    loser_id = opponent_id if winner_id == creator_id else creator_id
+    await bot.send_message(
+        loser_id,
+        f"😔 <b>Поражение</b>\n\n"
+        f"{game_emoji} Дуэль #{duel_id}\n"
+        f"🎲 Твой результат: {creator_result if loser_id == creator_id else opponent_result}\n"
+        f"🎲 Соперник: {opponent_result if loser_id == creator_id else creator_result}\n\n"
+        f"💔 Проиграно: {bet_amount} USDT\n"
+        f"💵 Баланс: {get_balance(loser_id):.2f} USDT"
+    )
+
+
+# 6. ОТМЕНА ДУЭЛИ
+@dp.callback_query(F.data.startswith("duel_cancel_"))
+async def duel_cancel_handler(callback: types.CallbackQuery):
+    duel_id = int(callback.data.replace("duel_cancel_", ""))
+    user_id = callback.from_user.id
+    
+    duel = get_duel(duel_id)
+    
+    if not duel or duel[1] != user_id:
+        await callback.answer("❌ Нельзя отменить эту дуэль!", show_alert=True)
+        return
+    
+    if duel[5] != 'waiting':
+        await callback.answer("❌ Дуэль уже началась!", show_alert=True)
+        return
+    
+    # Отменяем и возвращаем ставку
+    cancel_duel(duel_id)
+    update_balance(user_id, duel[4])
+    
+    await callback.message.edit_text(
+        f"✅ <b>Дуэль отменена</b>\n\n"
+        f"💰 Ставка возвращена: {duel[4]} USDT"
+    )
+    await callback.answer()
+
+
+# 7. МОИ ДУЭЛИ
+@dp.callback_query(F.data == "duel_my")
+async def duel_my(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    duels = get_user_duels(user_id, 10)
+    
+    if not duels:
+        await callback.message.edit_text(
+            "<b>📜 Мои дуэли</b>\n\n"
+            "У тебя ещё не было дуэлей!",
+            reply_markup=duels_menu_keyboard()
+        )
+        await callback.answer()
+        return
+    
+    text = "<b>📜 Последние 10 дуэлей:</b>\n\n"
+    
+    for duel in duels:
+        duel_id = duel[0]
+        creator_id = duel[1]
+        opponent_id = duel[2]
+        game_type = duel[3]
+        bet_amount = duel[4]
+        status = duel[5]
+        creator_result = duel[6]
+        opponent_result = duel[7]
+        winner_id = duel[8]
+        
+        game_emoji = GAMES[game_type]['emoji']
+        
+        if status == 'waiting':
+            status_text = "⏳ Ожидание"
+        elif status == 'cancelled':
+            status_text = "❌ Отменена"
+        elif status == 'finished':
+            if winner_id == user_id:
+                status_text = "🏆 Победа"
+            elif winner_id is None:
+                status_text = "🤝 Ничья"
+            else:
+                status_text = "😔 Поражение"
+        else:
+            status_text = status
+        
+        text += f"#{duel_id} {game_emoji} | {bet_amount} USDT | {status_text}\n"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=duels_menu_keyboard()
+    )
+    await callback.answer()
+
+
+# 8. ВОЗВРАТ В МЕНЮ ДУЭЛЕЙ
+@dp.callback_query(F.data == "duel_menu")
+async def duel_menu_callback(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text(
+        "<b>⚔️ ДУЭЛИ</b>\n\n"
+        "Сразись с другим игроком!\n\n"
+        "🎯 <b>Как играть:</b>\n"
+        "1. Создай дуэль или прими чужую\n"
+        "2. Оба игрока бросают кубик\n"
+        "3. У кого выше результат - тот забирает банк!\n\n"
+        "💰 <b>Комиссия:</b> 5% от банка",
+        reply_markup=duels_menu_keyboard()
+    )
+    await callback.answer()
+    
 async def main():
     init_db()
     logger.info("🚀 Бот запущен!")
