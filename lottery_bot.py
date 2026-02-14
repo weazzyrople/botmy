@@ -200,7 +200,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-     cursor.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS duels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             creator_id INTEGER,
