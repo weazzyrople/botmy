@@ -267,7 +267,7 @@ cursor.execute('''
         )
     ''')
     
-    cursor.execute('''
+cursor.execute('''
         CREATE TABLE IF NOT EXISTS tournament_participants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tournament_id INTEGER,
