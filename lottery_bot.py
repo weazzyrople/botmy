@@ -259,7 +259,6 @@ cursor.execute('''
         FOREIGN KEY (user_id) REFERENCES users (user_id)
     )
 ''')
-    
     conn.commit()
     conn.close()
 if win:
