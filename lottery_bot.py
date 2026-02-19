@@ -278,7 +278,8 @@ cursor.execute('''
         FOREIGN KEY (tournament_id) REFERENCES tournaments (id),
         FOREIGN KEY (user_id) REFERENCES users (user_id)
     )
-''')
+''') 
+
     conn.commit()
     conn.close()
 
