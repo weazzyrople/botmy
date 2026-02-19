@@ -57,7 +57,26 @@ def get_vip_level(total_deposited: float) -> str:
     elif total_deposited >= 50:
         return 'silver'
     return 'bronze'
+    
+def get_streak_bonus_multiplier(win_streak: int) -> float:
+    """Получить множитель бонуса за серию побед"""
+    if win_streak >= 10:
+        return 0.01  # +1.0% к прибыли (МАКСИМУМ)
+    elif win_streak >= 5:
+        return 0.005  # +0.5% к прибыли
+    elif win_streak >= 3:
+        return 0.003  # +0.3% к прибыли
+    return 0.0  # Нет бонуса
 
+def get_streak_emoji(win_streak: int) -> str:
+    """Эмодзи для стрика"""
+    if win_streak >= 10:
+        return "🔥🔥🔥"
+    elif win_streak >= 5:
+        return "🔥🔥"
+    elif win_streak >= 3:
+        return "🔥"
+    return ""
 def get_ton_price() -> float:
     try:
         url = "https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd"
@@ -149,8 +168,9 @@ def init_db():
             total_lost REAL DEFAULT 0,
             games_played INTEGER DEFAULT 0,
             wins INTEGER DEFAULT 0,
-            losses INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+           losses INTEGER DEFAULT 0,
+           win_streak INTEGER DEFAULT 0,
+           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
@@ -261,10 +281,6 @@ cursor.execute('''
 ''')
     conn.commit()
     conn.close()
-if win:
-    profit = payout - bet_amount
-    update_tournament_stats(user_id, profit * 0.05)
-
 
 def get_user(user_id: int):
     conn = sqlite3.connect('lottery_bot.db')
@@ -299,39 +315,83 @@ def set_balance(user_id: int, amount: float):
     cursor.execute('UPDATE users SET balance = ? WHERE user_id = ?', (amount, user_id))
     conn.commit()
     conn.close()
-
 def record_game(user_id: int, game_type: str, bet_type: str, bet_amount: float,
                 result_value: int, win: bool, payout: float):
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
+    
+  
+    cursor.execute('SELECT win_streak FROM users WHERE user_id = ?', (user_id,))
+    current_streak = cursor.fetchone()[0]
+    
     cursor.execute('''
         INSERT INTO games (user_id, game_type, bet_type, bet_amount, result_value, win, payout)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (user_id, game_type, bet_type, bet_amount, result_value, win, payout))
+    
     if win:
-        profit = payout - bet_amount
+      
+        new_streak = current_streak + 1
+        
+        # Получаем множитель бонуса
+        bonus_multiplier = get_streak_bonus_multiplier(new_streak)
+        
+        
+        net_profit = payout - bet_amount
+        
+      
+        bonus_amount = net_profit * bonus_multiplier
+        
+        
+        total_profit = net_profit + bonus_amount
+        
         cursor.execute('''
             UPDATE users SET
                 balance = balance + ?,
                 total_wagered = total_wagered + ?,
                 total_won = total_won + ?,
                 games_played = games_played + 1,
-                wins = wins + 1
+                wins = wins + 1,
+                win_streak = ?
             WHERE user_id = ?
-        ''', (profit, bet_amount, payout, user_id))
+        ''', (total_profit, bet_amount, payout + bonus_amount, new_streak, user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            'net_profit': net_profit,
+            'bonus_amount': bonus_amount,
+            'total_profit': total_profit,
+            'streak': new_streak,
+            'bonus_multiplier': bonus_multiplier
+        }
     else:
+  
+        old_streak = current_streak
+        
         cursor.execute('''
             UPDATE users SET
                 balance = balance - ?,
                 total_wagered = total_wagered + ?,
                 total_lost = total_lost + ?,
                 games_played = games_played + 1,
-                losses = losses + 1
+                losses = losses + 1,
+                win_streak = 0
             WHERE user_id = ?
         ''', (bet_amount, bet_amount, bet_amount, user_id))
-    conn.commit()
-    conn.close()
-
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            'net_profit': 0,
+            'bonus_amount': 0,
+            'total_profit': 0,
+            'streak': 0,
+            'bonus_multiplier': 0,
+            'old_streak': old_streak
+        }
 
 if win:
     profit = payout - bet_amount
@@ -971,9 +1031,6 @@ async def auto_check_ton_payment(message, user_id, payment_id, amount_ton, amoun
     return False
 
 
-# ======================================================
-# ИГРОВЫЕ ФУНКЦИИ
-# ======================================================
 
 async def process_game(message: types.Message, user_id: int, game_id: str, bet_type: str, bet_amount: float, state: FSMContext):
     game_data = GAMES[game_id]
@@ -1022,54 +1079,77 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
         [InlineKeyboardButton(text="🎰 Сделать ставку", url="https://t.me/ffortunna_bot")]
     ])
 
-    if is_win:
-        payout = bet_amount * bet_config['odds']
-        profit = payout - bet_amount
-        record_game(user_id, game_id, bet_type, bet_amount, result_value, True, payout)
+  if is_win:
+    base_payout = bet_amount * bet_config['odds']
+    
+  
+    result = record_game(user_id, game_id, bet_type, bet_amount, result_value, True, base_payout)
+    
+    net_profit = result['net_profit']
+    bonus_amount = result['bonus_amount']
+    total_profit = result['total_profit']
+    streak = result['streak']
+    bonus_multiplier = result['bonus_multiplier']
+    
+   
+    streak_emoji = get_streak_emoji(streak)
+    streak_text = ""
+    if streak >= 3:
+        streak_text = f"\n🔥 <b>БОНУС СТРИКА x{streak}!</b>\n💰 Базовая прибыль: {net_profit:.2f} USDT\n🎁 Бонус (+{bonus_multiplier*100:.1f}%): +{bonus_amount:.2f} USDT"
 
-        await bot.send_message(STATS_CHANNEL_ID,
-            f"🎉🎉🎉 <b>ПОБЕДА!</b> 🎉🎉🎉\n\n"
-            f"💰💰💰 КРУПНЫЙ ВЫИГРЫШ! 💰💰💰\n\n"
-            f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
-            f"🎲 Результат: <b>{result_value}</b> ✅\n"
-            f"💰 Ставка: {bet_amount:.2f} USDT\n"
-            f"💵 Выигрыш: <b>+{profit:.2f} USDT</b>\n"
-            f"👤 Игрок: {first_name}\n\n"
-            f"🔥 Хочешь так же? Жми кнопку! 👇", reply_markup=kb)
+    await bot.send_message(STATS_CHANNEL_ID,
+        f"🎉🎉🎉 <b>ПОБЕДА!</b> 🎉🎉🎉 {streak_emoji}\n\n"
+        f"💰💰💰 КРУПНЫЙ ВЫИГРЫШ! 💰💰💰\n\n"
+        f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
+        f"🎲 Результат: <b>{result_value}</b> ✅\n"
+        f"💰 Ставка: {bet_amount:.2f} USDT{streak_text}\n"
+        f"💎 <b>ИТОГОВАЯ ПРИБЫЛЬ: +{total_profit:.2f} USDT</b>\n"
+        f"👤 Игрок: {first_name}\n\n"
+        f"🔥 Хочешь так же? Жми кнопку! 👇", reply_markup=kb)
 
-        await bot.send_message(user_id,
-            f"🎉 <b>ПОБЕДА!</b>\n\n"
-            f"🎮 Игра: {game_name}\n"
-            f"🎯 Ставка: {bet_type}\n"
-            f"🎲 Результат: {result_value}\n"
-            f"💰 Ставка: {bet_amount:.2f} USDT\n"
-            f"✅ Выигрыш: <b>+{profit:.2f} USDT</b>\n\n"
-            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>",
-            reply_markup=repeat_bet_keyboard(game_id, bet_type, bet_amount))
-    else:
-        record_game(user_id, game_id, bet_type, bet_amount, result_value, False, 0)
+    profit_text = f"💵 Прибыль: <b>+{net_profit:.2f} USDT</b>" if streak < 3 else f"💰 Базовая: +{net_profit:.2f} USDT\n🎁 Бонус стрика: +{bonus_amount:.2f} USDT"
+    
+    await bot.send_message(user_id,
+        f"🎉 <b>ПОБЕДА!</b> {streak_emoji}\n\n"
+        f"🎮 Игра: {game_name}\n"
+        f"🎯 Ставка: {bet_type}\n"
+        f"🎲 Результат: {result_value}\n"
+        f"💸 Ставка: {bet_amount:.2f} USDT\n"
+        f"{profit_text}\n"
+        f"💎 <b>ИТОГО: +{total_profit:.2f} USDT</b>\n\n"
+        f"🔥 <b>Серия побед: {streak}</b>\n"
+        f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>",
+        reply_markup=repeat_bet_keyboard(game_id, bet_type, bet_amount))
 
-        await bot.send_message(STATS_CHANNEL_ID,
-            f"😔 <b>Проигрыш</b>\n\n"
-            f"💔 Не повезло в этот раз...\n\n"
-            f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
-            f"🎲 Результат: <b>{result_value}</b> ❌\n"
-            f"💰 Потеря: {bet_amount:.2f} USDT\n"
-            f"👤 Игрок: {first_name}\n\n"
-            f"🎯 Попробуй еще раз! Удача рядом! 🍀", reply_markup=kb)
+else:
+    result = record_game(user_id, game_id, bet_type, bet_amount, result_value, False, 0)
+    old_streak = result.get('old_streak', 0)
+    
+    streak_lost_text = ""
+    if old_streak >= 3:
+        streak_emoji = get_streak_emoji(old_streak)
+        streak_lost_text = f"\n💔 Серия побед прервана! {streak_emoji} (было {old_streak})"
 
-        await bot.send_message(user_id,
-            f"😔 <b>Проигрыш</b>\n\n"
-            f"🎮 Игра: {game_name}\n"
-            f"🎯 Ставка: {bet_type}\n"
-            f"🎲 Результат: {result_value}\n"
-            f"💰 Ставка: {bet_amount:.2f} USDT\n"
-            f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>\n\n"
-            f"💵 Ваш баланс: <b>{get_balance(user_id):.2f} USDT</b>",
-            reply_markup=repeat_bet_keyboard(game_id, bet_type, bet_amount))
+    await bot.send_message(STATS_CHANNEL_ID,
+        f"😔 <b>Проигрыш</b>\n\n"
+        f"💔 Не повезло в этот раз...\n\n"
+        f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
+        f"🎲 Результат: <b>{result_value}</b> ❌\n"
+        f"💰 Потеря: {bet_amount:.2f} USDT\n"
+        f"👤 Игрок: {first_name}{streak_lost_text}\n\n"
+        f"🎯 Попробуй еще раз! Удача рядом! 🍀", reply_markup=kb)
+
+    await bot.send_message(user_id,
+        f"😔 <b>Проигрыш</b>\n\n"
+        f"🎮 Игра: {game_name}\n"
+        f"🎯 Ставка: {bet_type}\n"
+        f"🎲 Результат: {result_value}\n"
+        f"💰 Ставка: {bet_amount:.2f} USDT\n"
+        f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>{streak_lost_text}\n\n"
+        f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>",
+        reply_markup=repeat_bet_keyboard(game_id, bet_type, bet_amount))
 
     await state.clear()
-
 
 async def start_duel_game(message: types.Message, duel_id: int, state: FSMContext):
     duel = get_duel(duel_id)
@@ -1142,10 +1222,6 @@ async def start_duel_game(message: types.Message, duel_id: int, state: FSMContex
         f"💔 Проиграно: {bet_amount} USDT\n"
         f"💵 Баланс: {get_balance(loser_id):.2f} USDT")
 
-
-# ======================================================
-# ОБРАБОТЧИКИ
-# ======================================================
 
 @dp.pre_checkout_query()
 async def process_pre_checkout_query(pre_checkout_query: types.PreCheckoutQuery):
@@ -1230,20 +1306,35 @@ async def cmd_start(message: types.Message):
     ])
 
     await message.answer(
-        f"<b>🎰 Добро пожаловать в Лотерейного Бота!</b>\n\n"
-        f"Привет, {first_name}! 👋\n\n"
-        f"<b>Доступные игры:</b>\n"
-        f"🎲 Кубик | 🏀 Баскетбол | ⚽ Футбол | 🎯 Дартс | 🎳 Боулинг | 🪙 Монетка\n\n"
-        f"<b>Способы оплаты:</b>\n"
-        f"⭐️ Telegram Stars (50 Stars = 1 USDT)\n"
-        f"💎 Криптовалюта (USDT)\n"
-        f"💠 TON Wallet\n\n"
-        f"🎁 <b>Приглашай друзей и получай 5% от их пополнений!</b>\n\n"
-        f"Выбери действие из меню ниже ⬇️",
-        reply_markup=keyboard
-    )
-    await message.answer("💰 <b>Начни зарабатывать прямо сейчас!</b>", reply_markup=inline_keyboard)
-
+      await message.answer(
+    f"<b>🎰 Добро пожаловать в FORTUNA!</b>\n\n"
+    f"Привет, {first_name}! 👋\n\n"
+    f"<b>🎮 Доступные игры:</b>\n"
+    f"🎲 Кубик | 🏀 Баскетбол | ⚽ Футбол\n"
+    f"🎯 Дартс | 🎳 Боулинг | 🪙 Монетка\n\n"
+    f"<b>🔥 СТРИКИ - СИСТЕМА БОНУСОВ!</b>\n"
+    f"Побеждай подряд и получай больше:\n"
+    f"• 3 победы → +0.3% к выигрышу 🔥\n"
+    f"• 5 побед → +0.5% к выигрышу 🔥🔥\n"
+    f"• 10 побед → +1.0% к выигрышу 🔥🔥🔥\n\n"
+    f"<b>⚔️ PVP ДУЭЛИ</b>\n"
+    f"• Сражайся с другими игроками\n"
+    f"• Победитель забирает 90% банка\n"
+    f"• Комиссия: 10%\n\n"
+    f"<b>🏆 ТУРНИРЫ ВЫХОДНОГО ДНЯ</b>\n"
+    f"• Каждую субботу и воскресенье\n"
+    f"• Взнос: 10 USDT\n"
+    f"• Играй в любые игры и зарабатывай очки\n"
+    f"• Топ-3 делят призовой фонд!\n\n"
+    f"<b>💰 Способы пополнения:</b>\n"
+    f"⭐ Telegram Stars (50 Stars = 1 USDT)\n"
+    f"💎 Криптовалюта (USDT)\n"
+    f"💠 TON Wallet\n\n"
+    f"<b>👥 Реферальная программа:</b>\n"
+    f"🎁 Получай <b>5% от каждого пополнения</b> друга!\n\n"
+    f"Выбери действие из меню ниже ⬇️",
+    reply_markup=keyboard
+)
 
 @dp.message(Command("myid"))
 async def cmd_my_id(message: types.Message):
@@ -1275,6 +1366,10 @@ async def menu_profile(message: types.Message):
     wins = stats[10]
     losses = stats[11]
     win_rate = (wins / games_played * 100) if games_played > 0 else 0
+    win_streak = stats[12]
+    streak_emoji = get_streak_emoji(win_streak)
+    bonus_mult = get_streak_bonus_multiplier(win_streak)
+    bonus_text = f" → +{bonus_mult*100:.1f}% к прибыли" if win_streak >= 3 else ""
     profit = total_won - total_lost
 
     vip_level = get_vip_level(total_deposited)
@@ -1296,6 +1391,7 @@ async def menu_profile(message: types.Message):
         f"✔️ <b>Побед:</b> {wins}\n"
         f"✖️ <b>Поражений:</b> {losses}\n"
         f"📈 <b>Винрейт:</b> {win_rate:.1f}%"
+        f"🔥 <b>Серия побед:</b> {win_streak} {streak_emoji}{bonus_text}"
     )
 
 
