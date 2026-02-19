@@ -268,18 +268,18 @@ cursor.execute('''
 ''')
 
 cursor.execute('''
-    CREATE TABLE IF NOT EXISTS tournament_participants (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tournament_id INTEGER,
-        user_id INTEGER,
-        profit REAL DEFAULT 0,
-        games_played INTEGER DEFAULT 0,
-        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (tournament_id) REFERENCES tournaments (id),
-        FOREIGN KEY (user_id) REFERENCES users (user_id)
-    )
-''') 
-
+        CREATE TABLE IF NOT EXISTS tournament_participants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tournament_id INTEGER,
+            user_id INTEGER,
+            profit REAL DEFAULT 0,
+            games_played INTEGER DEFAULT 0,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (tournament_id) REFERENCES tournaments (id),
+            FOREIGN KEY (user_id) REFERENCES users (user_id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
