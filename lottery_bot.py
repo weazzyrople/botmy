@@ -255,19 +255,19 @@ def init_db():
     ''')
 
 cursor.execute('''
-    CREATE TABLE IF NOT EXISTS tournaments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        entry_fee REAL,
-        prize_pool REAL,
-        status TEXT DEFAULT 'active',
-        start_time TIMESTAMP,
-        end_time TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-''')
-
-cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tournaments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            entry_fee REAL,
+            prize_pool REAL,
+            status TEXT DEFAULT 'active',
+            start_time TIMESTAMP,
+            end_time TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS tournament_participants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tournament_id INTEGER,
@@ -282,6 +282,8 @@ cursor.execute('''
     
     conn.commit()
     conn.close()
+
+
 
 def get_user(user_id: int):
     conn = sqlite3.connect('lottery_bot.db')
