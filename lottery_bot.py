@@ -41,7 +41,7 @@ STARS_TO_USDT_RATE = 1 / 50
 TON_TO_USDT_RATE = 5.5
 TON_WALLET_ADDRESS = "UQDzTiMyO6C15cz1_n2dRLitZr7Q2FMCa4kDEG-cD7QHwcgZ"
 
-# ============ VIP УРОВНИ ============
+
 VIP_LEVELS = {
     'bronze':   {'name': '🥉 Бронза',  'min_deposit': 0,   'cashback': 0.00},
     'silver':   {'name': '🥈 Серебро', 'min_deposit': 50,  'cashback': 0.01},
@@ -92,7 +92,7 @@ class BetStates(StatesGroup):
     duel_entering_amount = State()
     duel_waiting_opponent = State()
     coin_entering_amount = State()
-
+    tournament_entering_amount = State()
 
 GAMES = {
     'dice':       {'emoji': '🎲', 'name': 'Кубик',     'dice_emoji': DiceEmoji.DICE},
@@ -131,9 +131,6 @@ BET_TYPES = {
 }
 
 
-# ======================================================
-# БАЗА ДАННЫХ
-# ======================================================
 
 def init_db():
     conn = sqlite3.connect('lottery_bot.db')
@@ -237,22 +234,38 @@ def init_db():
         )
     ''')
 
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS daily_bonus (
-            user_id INTEGER PRIMARY KEY,
-            last_claimed TIMESTAMP,
-            streak INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS tournaments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        entry_fee REAL,
+        prize_pool REAL,
+        status TEXT DEFAULT 'active',
+        start_time TIMESTAMP,
+        end_time TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+''')
 
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS tournament_participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tournament_id INTEGER,
+        user_id INTEGER,
+        profit REAL DEFAULT 0,
+        games_played INTEGER DEFAULT 0,
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (tournament_id) REFERENCES tournaments (id),
+        FOREIGN KEY (user_id) REFERENCES users (user_id)
+    )
+''')
+    
     conn.commit()
     conn.close()
+if win:
+    profit = payout - bet_amount
+    update_tournament_stats(user_id, profit * 0.05)
 
-
-# ======================================================
-# ФУНКЦИИ БД
-# ======================================================
 
 def get_user(user_id: int):
     conn = sqlite3.connect('lottery_bot.db')
@@ -319,6 +332,12 @@ def record_game(user_id: int, game_type: str, bet_type: str, bet_amount: float,
         ''', (bet_amount, bet_amount, bet_amount, user_id))
     conn.commit()
     conn.close()
+
+
+if win:
+    profit = payout - bet_amount
+    # Обновляем статистику турнира (5% от прибыли)
+    update_tournament_stats(user_id, profit * 0.05)
 
 def get_user_stats(user_id: int):
     conn = sqlite3.connect('lottery_bot.db')
@@ -532,50 +551,11 @@ def get_user_duels(user_id: int, limit: int = 10):
     conn.close()
     return duels
 
-def check_daily_bonus(user_id: int):
-    conn = sqlite3.connect('lottery_bot.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT last_claimed, streak FROM daily_bonus WHERE user_id = ?', (user_id,))
-    result = cursor.fetchone()
-    conn.close()
-    if not result:
-        return True, 0
-    last_claimed = datetime.fromisoformat(result[0])
-    streak = result[1]
-    if datetime.now() - last_claimed >= timedelta(hours=24):
-        return True, streak
-    return False, streak
-
-def claim_daily_bonus(user_id: int, streak: int):
-    conn = sqlite3.connect('lottery_bot.db')
-    cursor = conn.cursor()
-    now = datetime.now()
-    row = cursor.execute('SELECT last_claimed FROM daily_bonus WHERE user_id = ?', (user_id,)).fetchone()
-    new_streak = 1
-    if row:
-        last = datetime.fromisoformat(row[0])
-        if now - last < timedelta(hours=48):
-            new_streak = streak + 1
-    bonus = min(0.5 + (new_streak - 1) * 0.1, 2.0)
-    cursor.execute('INSERT OR REPLACE INTO daily_bonus (user_id, last_claimed, streak) VALUES (?, ?, ?)',
-                   (user_id, now.isoformat(), new_streak))
-    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (bonus, user_id))
-    cursor.execute('''INSERT INTO transactions (user_id, type, amount, status, invoice_id)
-                      VALUES (?, 'daily_bonus', ?, 'completed', ?)''',
-                   (user_id, bonus, f"daily_{now.date()}"))
-    conn.commit()
-    conn.close()
-    return bonus, new_streak
-
-
-# ======================================================
-# КЛАВИАТУРЫ
-# ======================================================
 
 def admin_keyboard():
     keyboard = [
         [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="⚔️ Дуэли")],
-        [KeyboardButton(text="🪙 Монетка"), KeyboardButton(text="🎁 Бонус")],
+        [KeyboardButton(text="🏆 Турниры")],
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🏆 Топ игроков")],
@@ -586,7 +566,7 @@ def admin_keyboard():
 def main_keyboard():
     keyboard = [
         [KeyboardButton(text="🎮 Играть"), KeyboardButton(text="⚔️ Дуэли")],
-        [KeyboardButton(text="🪙 Монетка"), KeyboardButton(text="🎁 Бонус")],
+        [KeyboardButton(text="🏆 Турниры")],
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🏆 Топ игроков")],
@@ -632,6 +612,7 @@ def games_keyboard():
             text=f"{game_data['emoji']} {game_data['name']}",
             callback_data=f"game_{game_id}"
         )])
+    buttons.append([InlineKeyboardButton(text="🪙 Монетка", callback_data="game_coin")])
     buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -696,6 +677,115 @@ def duel_action_keyboard(duel_id: int):
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+def tournament_menu_keyboard(tournament_id: int = None):
+    """Меню турниров"""
+    buttons = []
+    if tournament_id:
+        buttons.append([InlineKeyboardButton(text="🎮 Вступить в турнир", callback_data=f"tournament_join_{tournament_id}")])
+        buttons.append([InlineKeyboardButton(text="📊 Таблица лидеров", callback_data=f"tournament_leaderboard_{tournament_id}")])
+    buttons.append([InlineKeyboardButton(text="ℹ️ О турнирах", callback_data="tournament_info")])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_active_tournament():
+    """Получить активный турнир"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM tournaments 
+        WHERE status = 'active' AND datetime(end_time) > datetime('now')
+        ORDER BY created_at DESC LIMIT 1
+    ''')
+    tournament = cursor.fetchone()
+    conn.close()
+    return tournament
+
+def join_tournament(tournament_id: int, user_id: int, entry_fee: float):
+    """Вступить в турнир"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+   
+    cursor.execute('SELECT * FROM tournament_participants WHERE tournament_id = ? AND user_id = ?',
+                   (tournament_id, user_id))
+    if cursor.fetchone():
+        conn.close()
+        return False
+    
+    cursor.execute('''
+        INSERT INTO tournament_participants (tournament_id, user_id)
+        VALUES (?, ?)
+    ''', (tournament_id, user_id))
+    # Добавляем entry_fee к prize_pool
+    cursor.execute('UPDATE tournaments SET prize_pool = prize_pool + ? WHERE id = ?',
+                   (entry_fee * 0.95, tournament_id))  # 5% комиссия
+    conn.commit()
+    conn.close()
+    return True
+
+def update_tournament_stats(user_id: int, profit: float):
+    """Обновить статистику игрока в турнире"""
+    tournament = get_active_tournament()
+    if not tournament:
+        return
+    tournament_id = tournament[0]
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE tournament_participants 
+        SET profit = profit + ?, games_played = games_played + 1
+        WHERE tournament_id = ? AND user_id = ?
+    ''', (profit, tournament_id, user_id))
+    conn.commit()
+    conn.close()
+
+def get_tournament_leaderboard(tournament_id: int, limit: int = 10):
+    """Получить таблицу лидеров турнира"""
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT tp.user_id, u.first_name, u.username, tp.profit, tp.games_played
+        FROM tournament_participants tp
+        JOIN users u ON tp.user_id = u.user_id
+        WHERE tp.tournament_id = ?
+        ORDER BY tp.profit DESC
+        LIMIT ?
+    ''', (tournament_id, limit))
+    leaders = cursor.fetchall()
+    conn.close()
+    return leaders
+
+def create_weekend_tournament():
+    """Создать турнир на выходные (вызывается автоматически)"""
+    now = datetime.now()
+    # Проверяем, что сегодня суббота (5) или воскресенье (6)
+    if now.weekday() not in [5, 6]:
+        return None
+    
+   
+    if get_active_tournament():
+        return None
+    
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    
+   
+    if now.weekday() == 5:  # Суббота
+        end_time = now.replace(hour=23, minute=59, second=59) + timedelta(days=1)
+        name = "🏆 Турнир выходного дня"
+    else:  # Воскресенье
+        end_time = now.replace(hour=23, minute=59, second=59)
+        name = "🏆 Воскресный турнир"
+    
+    cursor.execute('''
+        INSERT INTO tournaments (name, entry_fee, prize_pool, status, start_time, end_time)
+        VALUES (?, 10, 0, 'active', ?, ?)
+    ''', (name, now.isoformat(), end_time.isoformat()))
+    
+    tournament_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return tournament_id
+
 def repeat_bet_keyboard(game_id: str, bet_type: str, bet_amount: float):
     buttons = [
         [InlineKeyboardButton(text="🔄 Повторить ставку", callback_data=f"repeat_{game_id}_{bet_type}_{bet_amount}")],
@@ -713,9 +803,6 @@ def coin_choice_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-# ======================================================
-# ПЛАТЁЖНЫЕ ФУНКЦИИ
-# ======================================================
 
 async def create_invoice(amount: float, description: str):
     import aiohttp, ssl, certifi
@@ -1276,27 +1363,6 @@ async def menu_leaderboard(message: types.Message):
     await message.answer(text)
 
 
-@dp.message(F.text == "🎁 Бонус")
-async def menu_daily_bonus(message: types.Message):
-    user_id = message.from_user.id
-    can_claim, streak = check_daily_bonus(user_id)
-    if can_claim:
-        bonus, new_streak = claim_daily_bonus(user_id, streak)
-        await message.answer(
-            f"🎁 <b>Ежедневный бонус получен!</b>\n\n"
-            f"💰 Начислено: <b>+{bonus:.2f} USDT</b>\n"
-            f"🔥 Серия: {new_streak} {'день' if new_streak == 1 else 'дней'}\n"
-            f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>\n\n"
-            f"<i>Приходи завтра! Серия увеличивает бонус до 2 USDT</i>"
-        )
-    else:
-        _, streak = check_daily_bonus(user_id)
-        await message.answer(
-            f"⏳ <b>Бонус уже получен</b>\n\n"
-            f"🔥 Серия: {streak} дней\n\n"
-            f"Приходи завтра! 💰"
-        )
-
 
 @dp.message(F.text == "⚙️ Админ панель")
 async def menu_admin(message: types.Message):
@@ -1304,19 +1370,6 @@ async def menu_admin(message: types.Message):
         await message.answer("⛔️ У вас нет доступа к админ панели!")
         return
     await message.answer("<b>⚙️ Админ панель</b>\n\nВыберите действие:", reply_markup=admin_panel_keyboard())
-
-
-# ======== МОНЕТКА ========
-
-@dp.message(F.text == "🪙 Монетка")
-async def menu_coin(message: types.Message, state: FSMContext):
-    await state.set_state(BetStates.coin_entering_amount)
-    await message.answer(
-        "<b>🪙 МОНЕТКА</b>\n\n"
-        "Орёл или решка?\n"
-        "💰 Коэффициент: x1.9\n\n"
-        "Введи сумму ставки (от 1 USDT):"
-    )
 
 
 @dp.message(BetStates.coin_entering_amount)
@@ -1423,7 +1476,6 @@ async def coin_flip(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ======== НАВИГАЦИЯ ========
 
 @dp.callback_query(F.data == "back_main")
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
@@ -1445,7 +1497,7 @@ async def back_to_admin_panel(callback: types.CallbackQuery):
     await callback.answer()
 
 
-# ======== ИГРОВЫЕ ОБРАБОТЧИКИ ========
+=
 
 @dp.callback_query(F.data.startswith("game_"))
 async def select_game(callback: types.CallbackQuery, state: FSMContext):
@@ -1459,6 +1511,16 @@ async def select_game(callback: types.CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
+    @dp.callback_query(F.data == "game_coin")
+async def select_coin_game(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(BetStates.coin_entering_amount)
+    await callback.message.edit_text(
+        "<b>🪙 МОНЕТКА</b>\n\n"
+        "Орёл или решка?\n"
+        "💰 Коэффициент: x1.9\n\n"
+        "Введи сумму ставки (от 1 USDT):"
+    )
+    await callback.answer()
 
 @dp.callback_query(F.data.startswith("bettype_"))
 async def select_bet_type(callback: types.CallbackQuery, state: FSMContext):
@@ -1542,8 +1604,6 @@ async def process_promocode(message: types.Message, state: FSMContext):
         await message.answer(f"❌ <b>Ошибка!</b>\n\n{result}")
     await state.clear()
 
-
-# ======== ПЛАТЁЖНЫЕ ОБРАБОТЧИКИ ========
 
 @dp.callback_query(F.data.startswith("pay_stars_"))
 async def process_stars_payment(callback: types.CallbackQuery, state: FSMContext):
@@ -1635,7 +1695,6 @@ async def cancel_payment(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ======== ДУЭЛИ ========
 
 @dp.message(F.text == "⚔️ Дуэли")
 async def menu_duels(message: types.Message):
@@ -1652,6 +1711,127 @@ async def menu_duels(message: types.Message):
         reply_markup=duels_menu_keyboard()
     )
 
+    @dp.message(F.text == "🏆 Турниры")
+async def menu_tournaments(message: types.Message):
+    # Создаём турнир если его нет
+    create_weekend_tournament()
+    
+    tournament = get_active_tournament()
+    
+    if tournament:
+        t_id, name, entry_fee, prize_pool, status, start_time, end_time, created_at = tournament
+        
+        # Считаем участников
+        conn = sqlite3.connect('lottery_bot.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM tournament_participants WHERE tournament_id = ?', (t_id,))
+        participants = cursor.fetchone()[0]
+        conn.close()
+        
+        end_dt = datetime.fromisoformat(end_time)
+        time_left = end_dt - datetime.now()
+        hours_left = int(time_left.total_seconds() / 3600)
+        
+        await message.answer(
+            f"<b>{name}</b>\n\n"
+            f"💰 <b>Взнос:</b> {entry_fee} USDT\n"
+            f"🏆 <b>Призовой фонд:</b> {prize_pool:.2f} USDT\n"
+            f"👥 <b>Участников:</b> {participants}\n"
+            f"⏰ <b>Осталось:</b> {hours_left}ч\n\n"
+            f"<b>Условия:</b>\n"
+            f"• Играй в любые игры\n"
+            f"• Комиссия с выигрышей: 5%\n"
+            f"• Топ-3 игрока получают призы:\n"
+            f"  🥇 50% фонда\n"
+            f"  🥈 30% фонда\n"
+            f"  🥉 20% фонда\n\n"
+            f"Удачи! 🍀",
+            reply_markup=tournament_menu_keyboard(t_id)
+        )
+    else:
+        await message.answer(
+            "<b>🏆 ТУРНИРЫ</b>\n\n"
+            "⏰ Сейчас нет активных турниров\n\n"
+            "<b>Расписание:</b>\n"
+            "🗓 Каждую субботу и воскресенье\n"
+            "💰 Взнос: 10 USDT\n"
+            "🏆 Призовой фонд формируется из взносов\n\n"
+            "Приходи в выходные! 🎮",
+            reply_markup=tournament_menu_keyboard()
+        )
+
+@dp.callback_query(F.data.startswith("tournament_join_"))
+async def tournament_join_handler(callback: types.CallbackQuery):
+    tournament_id = int(callback.data.replace("tournament_join_", ""))
+    user_id = callback.from_user.id
+    
+    tournament = get_active_tournament()
+    if not tournament or tournament[0] != tournament_id:
+        await callback.answer("❌ Турнир не найден!", show_alert=True)
+        return
+    
+    entry_fee = tournament[2]
+    balance = get_balance(user_id)
+    
+    if balance < entry_fee:
+        await callback.answer(f"❌ Недостаточно средств! Нужно {entry_fee} USDT", show_alert=True)
+        return
+    
+    if join_tournament(tournament_id, user_id, entry_fee):
+        update_balance(user_id, -entry_fee)
+        await callback.answer(f"✅ Вы вступили в турнир! (-{entry_fee} USDT)", show_alert=True)
+        await callback.message.edit_text(
+            f"✅ <b>Вы участвуете в турнире!</b>\n\n"
+            f"💰 Списано: {entry_fee} USDT\n"
+            f"💵 Баланс: {get_balance(user_id):.2f} USDT\n\n"
+            f"Играйте и зарабатывайте очки! 🎮"
+        )
+    else:
+        await callback.answer("❌ Вы уже участвуете в этом турнире!", show_alert=True)
+
+@dp.callback_query(F.data.startswith("tournament_leaderboard_"))
+async def tournament_leaderboard_handler(callback: types.CallbackQuery):
+    tournament_id = int(callback.data.replace("tournament_leaderboard_", ""))
+    leaders = get_tournament_leaderboard(tournament_id, 10)
+    
+    if not leaders:
+        await callback.answer("Пока нет участников!", show_alert=True)
+        return
+    
+    text = "<b>🏆 ТАБЛИЦА ЛИДЕРОВ</b>\n\n"
+    medals = ["🥇", "🥈", "🥉"] + ["4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
+    
+    for i, leader in enumerate(leaders):
+        user_id, first_name, username, profit, games = leader
+        medal = medals[i] if i < len(medals) else f"{i+1}."
+        text += f"{medal} <b>{first_name}</b>\n   💰 {profit:+.2f} USDT | 🎮 {games} игр\n\n"
+    
+    await callback.message.edit_text(text, reply_markup=tournament_menu_keyboard(tournament_id))
+    await callback.answer()
+
+@dp.callback_query(F.data == "tournament_info")
+async def tournament_info_handler(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "<b>ℹ️ О ТУРНИРАХ</b>\n\n"
+        "<b>Когда:</b>\n"
+        "🗓 Каждую субботу и воскресенье\n\n"
+        "<b>Как участвовать:</b>\n"
+        "1. Оплати взнос (10 USDT)\n"
+        "2. Играй в любые игры\n"
+        "3. С каждого выигрыша 5% идёт в очки\n"
+        "4. Твоя цель — набрать максимум очков!\n\n"
+        "<b>Призы:</b>\n"
+        "🥇 1 место: 50% призового фонда\n"
+        "🥈 2 место: 30% призового фонда\n"
+        "🥉 3 место: 20% призового фонда\n\n"
+        "<b>Правила:</b>\n"
+        "• Комиссия 5% с каждого выигрыша\n"
+        "• Турнир длится всё время выходных\n"
+        "• Побеждает тот, кто заработал больше всех\n\n"
+        "Удачи! 🍀",
+        reply_markup=tournament_menu_keyboard()
+    )
+    await callback.answer()
 
 @dp.callback_query(F.data == "duel_create")
 async def duel_create_start(callback: types.CallbackQuery, state: FSMContext):
@@ -1797,7 +1977,6 @@ async def duel_menu_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ======== РЕФЕРАЛЫ ========
 
 @dp.message(F.text == "👥 Рефералы")
 async def menu_referrals(message: types.Message):
@@ -1846,9 +2025,6 @@ async def show_ref_link_callback(callback: types.CallbackQuery):
     await callback.answer()
 
 
-# Продолжение в следующей части (АДМИН ПАНЕЛЬ)
-
-# ======== АДМИН ПАНЕЛЬ ========
 
 @dp.callback_query(F.data == "admin_stats")
 async def admin_stats(callback: types.CallbackQuery):
@@ -2260,7 +2436,6 @@ async def admin_deposit_search_process(message: types.Message, state: FSMContext
         await message.answer("❌ Неверный формат ID!")
 
 
-# ======== КОМАНДЫ ========
 
 @dp.message(Command("approve_ton"))
 async def approve_ton_payment(message: types.Message):
@@ -2298,21 +2473,9 @@ async def cmd_ton_price(message: types.Message):
         f"💱 <b>Курс TON</b>\n\n1 TON = <b>${price}</b>\n\n"
         f"10 USDT = {10/price:.3f} TON\n50 USDT = {50/price:.3f} TON\n100 USDT = {100/price:.3f} TON")
 
-
-@dp.message(F.animation)
-async def get_gif_id(message: types.Message):
-    await message.answer(f"<b>GIF file_id:</b>\n<code>{message.animation.file_id}</code>")
-
-
-@dp.channel_post()
-async def get_message_id(message: types.Message):
-    if ADMIN_IDS:
-        await bot.send_message(ADMIN_IDS[0],
-            f"Message ID: {message.message_id}\nText: {(message.text or '')[:100]}")
-
-
 async def main():
     init_db()
+    create_weekend_tournament()
     logger.info("🚀 Бот запущен!")
     await dp.start_polling(bot)
 
