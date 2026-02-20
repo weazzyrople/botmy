@@ -1302,7 +1302,6 @@ async def cmd_start(message: types.Message):
     ])
 
     await message.answer(
-      await message.answer(
     f"<b>🎰 Добро пожаловать в FORTUNA!</b>\n\n"
     f"Привет, {first_name}! 👋\n\n"
     f"<b>🎮 Доступные игры:</b>\n"
