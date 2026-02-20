@@ -254,7 +254,7 @@ def init_db():
         )
     ''')
 
-cursor.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS tournaments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
@@ -394,11 +394,6 @@ def record_game(user_id: int, game_type: str, bet_type: str, bet_amount: float,
             'bonus_multiplier': 0,
             'old_streak': old_streak
         }
-
-if win:
-    profit = payout - bet_amount
-    # Обновляем статистику турнира (5% от прибыли)
-    update_tournament_stats(user_id, profit * 0.05)
 
 def get_user_stats(user_id: int):
     conn = sqlite3.connect('lottery_bot.db')
@@ -1081,7 +1076,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
         [InlineKeyboardButton(text="🎰 Сделать ставку", url="https://t.me/ffortunna_bot")]
     ])
 
-  if is_win:
+    if is_win:
     base_payout = bet_amount * bet_config['odds']
     
   
@@ -1343,7 +1338,6 @@ async def cmd_my_id(message: types.Message):
     await message.answer(f"<b>🆔 Ваш Telegram ID:</b>\n\n<code>{message.from_user.id}</code>")
 
 
-# ======== ГЛАВНОЕ МЕНЮ ========
 
 @dp.message(F.text == "🎮 Играть")
 async def menu_play(message: types.Message, state: FSMContext):
@@ -1594,8 +1588,6 @@ async def back_to_admin_panel(callback: types.CallbackQuery):
     await callback.answer()
 
 
-=
-
 @dp.callback_query(F.data.startswith("game_"))
 async def select_game(callback: types.CallbackQuery, state: FSMContext):
     game_id = callback.data.split("_")[1]
@@ -1608,7 +1600,7 @@ async def select_game(callback: types.CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-    @dp.callback_query(F.data == "game_coin")
+@dp.callback_query(F.data == "game_coin")
 async def select_coin_game(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(BetStates.coin_entering_amount)
     await callback.message.edit_text(
@@ -1808,7 +1800,7 @@ async def menu_duels(message: types.Message):
         reply_markup=duels_menu_keyboard()
     )
 
-    @dp.message(F.text == "🏆 Турниры")
+@dp.message(F.text == "🏆 Турниры")
 async def menu_tournaments(message: types.Message):
     # Создаём турнир если его нет
     create_weekend_tournament()
