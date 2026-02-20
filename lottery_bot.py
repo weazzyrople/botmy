@@ -1068,7 +1068,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
     await bot.send_dice(user_id, emoji=dice_emoji)
     await asyncio.sleep(4)
 
-    bet_config = BET_TYPES[game_id][bet_type]
+   bet_config = BET_TYPES[game_id][bet_type]
     is_win = bet_config['check'](result_value)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -1076,74 +1076,74 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
     ])
 
     if is_win:
-    base_payout = bet_amount * bet_config['odds']
-    
-  
-    result = record_game(user_id, game_id, bet_type, bet_amount, result_value, True, base_payout)
-    
-    net_profit = result['net_profit']
-    bonus_amount = result['bonus_amount']
-    total_profit = result['total_profit']
-    streak = result['streak']
-    bonus_multiplier = result['bonus_multiplier']
-    
-   
-    streak_emoji = get_streak_emoji(streak)
-    streak_text = ""
-    if streak >= 3:
-        streak_text = f"\n🔥 <b>БОНУС СТРИКА x{streak}!</b>\n💰 Базовая прибыль: {net_profit:.2f} USDT\n🎁 Бонус (+{bonus_multiplier*100:.1f}%): +{bonus_amount:.2f} USDT"
+        base_payout = bet_amount * bet_config['odds']
+        
+        
+        result = record_game(user_id, game_id, bet_type, bet_amount, result_value, True, base_payout)
+        
+        net_profit = result['net_profit']
+        bonus_amount = result['bonus_amount']
+        total_profit = result['total_profit']
+        streak = result['streak']
+        bonus_multiplier = result['bonus_multiplier']
+        
+        # Формируем текст о стрике
+        streak_emoji = get_streak_emoji(streak)
+        streak_text = ""
+        if streak >= 3:
+            streak_text = f"\n🔥 <b>БОНУС СТРИКА x{streak}!</b>\n💰 Базовая прибыль: {net_profit:.2f} USDT\n🎁 Бонус (+{bonus_multiplier*100:.1f}%): +{bonus_amount:.2f} USDT"
 
-    await bot.send_message(STATS_CHANNEL_ID,
-        f"🎉🎉🎉 <b>ПОБЕДА!</b> 🎉🎉🎉 {streak_emoji}\n\n"
-        f"💰💰💰 КРУПНЫЙ ВЫИГРЫШ! 💰💰💰\n\n"
-        f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
-        f"🎲 Результат: <b>{result_value}</b> ✅\n"
-        f"💰 Ставка: {bet_amount:.2f} USDT{streak_text}\n"
-        f"💎 <b>ИТОГОВАЯ ПРИБЫЛЬ: +{total_profit:.2f} USDT</b>\n"
-        f"👤 Игрок: {first_name}\n\n"
-        f"🔥 Хочешь так же? Жми кнопку! 👇", reply_markup=kb)
+        await bot.send_message(STATS_CHANNEL_ID,
+            f"🎉🎉🎉 <b>ПОБЕДА!</b> 🎉🎉🎉 {streak_emoji}\n\n"
+            f"💰💰💰 КРУПНЫЙ ВЫИГРЫШ! 💰💰💰\n\n"
+            f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
+            f"🎲 Результат: <b>{result_value}</b> ✅\n"
+            f"💰 Ставка: {bet_amount:.2f} USDT{streak_text}\n"
+            f"💎 <b>ИТОГОВАЯ ПРИБЫЛЬ: +{total_profit:.2f} USDT</b>\n"
+            f"👤 Игрок: {first_name}\n\n"
+            f"🔥 Хочешь так же? Жми кнопку! 👇", reply_markup=kb)
 
-    profit_text = f"💵 Прибыль: <b>+{net_profit:.2f} USDT</b>" if streak < 3 else f"💰 Базовая: +{net_profit:.2f} USDT\n🎁 Бонус стрика: +{bonus_amount:.2f} USDT"
-    
-    await bot.send_message(user_id,
-        f"🎉 <b>ПОБЕДА!</b> {streak_emoji}\n\n"
-        f"🎮 Игра: {game_name}\n"
-        f"🎯 Ставка: {bet_type}\n"
-        f"🎲 Результат: {result_value}\n"
-        f"💸 Ставка: {bet_amount:.2f} USDT\n"
-        f"{profit_text}\n"
-        f"💎 <b>ИТОГО: +{total_profit:.2f} USDT</b>\n\n"
-        f"🔥 <b>Серия побед: {streak}</b>\n"
-        f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>",
-        reply_markup=repeat_bet_keyboard(game_id, bet_type, bet_amount))
+        profit_text = f"💵 Прибыль: <b>+{net_profit:.2f} USDT</b>" if streak < 3 else f"💰 Базовая: +{net_profit:.2f} USDT\n🎁 Бонус стрика: +{bonus_amount:.2f} USDT"
+        
+        await bot.send_message(user_id,
+            f"🎉 <b>ПОБЕДА!</b> {streak_emoji}\n\n"
+            f"🎮 Игра: {game_name}\n"
+            f"🎯 Ставка: {bet_type}\n"
+            f"🎲 Результат: {result_value}\n"
+            f"💸 Ставка: {bet_amount:.2f} USDT\n"
+            f"{profit_text}\n"
+            f"💎 <b>ИТОГО: +{total_profit:.2f} USDT</b>\n\n"
+            f"🔥 <b>Серия побед: {streak}</b>\n"
+            f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>",
+            reply_markup=repeat_bet_keyboard(game_id, bet_type, bet_amount))
 
-else:
-    result = record_game(user_id, game_id, bet_type, bet_amount, result_value, False, 0)
-    old_streak = result.get('old_streak', 0)
-    
-    streak_lost_text = ""
-    if old_streak >= 3:
-        streak_emoji = get_streak_emoji(old_streak)
-        streak_lost_text = f"\n💔 Серия побед прервана! {streak_emoji} (было {old_streak})"
+    else:
+        result = record_game(user_id, game_id, bet_type, bet_amount, result_value, False, 0)
+        old_streak = result.get('old_streak', 0)
+        
+        streak_lost_text = ""
+        if old_streak >= 3:
+            streak_emoji = get_streak_emoji(old_streak)
+            streak_lost_text = f"\n💔 Серия побед прервана! {streak_emoji} (было {old_streak})"
 
-    await bot.send_message(STATS_CHANNEL_ID,
-        f"😔 <b>Проигрыш</b>\n\n"
-        f"💔 Не повезло в этот раз...\n\n"
-        f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
-        f"🎲 Результат: <b>{result_value}</b> ❌\n"
-        f"💰 Потеря: {bet_amount:.2f} USDT\n"
-        f"👤 Игрок: {first_name}{streak_lost_text}\n\n"
-        f"🎯 Попробуй еще раз! Удача рядом! 🍀", reply_markup=kb)
+        await bot.send_message(STATS_CHANNEL_ID,
+            f"😔 <b>Проигрыш</b>\n\n"
+            f"💔 Не повезло в этот раз...\n\n"
+            f"{game_emoji} <b>{game_name}</b> - {bet_type}\n"
+            f"🎲 Результат: <b>{result_value}</b> ❌\n"
+            f"💰 Потеря: {bet_amount:.2f} USDT\n"
+            f"👤 Игрок: {first_name}{streak_lost_text}\n\n"
+            f"🎯 Попробуй еще раз! Удача рядом! 🍀", reply_markup=kb)
 
-    await bot.send_message(user_id,
-        f"😔 <b>Проигрыш</b>\n\n"
-        f"🎮 Игра: {game_name}\n"
-        f"🎯 Ставка: {bet_type}\n"
-        f"🎲 Результат: {result_value}\n"
-        f"💰 Ставка: {bet_amount:.2f} USDT\n"
-        f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>{streak_lost_text}\n\n"
-        f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>",
-        reply_markup=repeat_bet_keyboard(game_id, bet_type, bet_amount))
+        await bot.send_message(user_id,
+            f"😔 <b>Проигрыш</b>\n\n"
+            f"🎮 Игра: {game_name}\n"
+            f"🎯 Ставка: {bet_type}\n"
+            f"🎲 Результат: {result_value}\n"
+            f"💰 Ставка: {bet_amount:.2f} USDT\n"
+            f"❌ Потеря: <b>-{bet_amount:.2f} USDT</b>{streak_lost_text}\n\n"
+            f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>",
+            reply_markup=repeat_bet_keyboard(game_id, bet_type, bet_amount))
 
     await state.clear()
 
