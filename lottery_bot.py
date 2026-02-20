@@ -168,9 +168,9 @@ def init_db():
             total_lost REAL DEFAULT 0,
             games_played INTEGER DEFAULT 0,
             wins INTEGER DEFAULT 0,
-           losses INTEGER DEFAULT 0,
-           win_streak INTEGER DEFAULT 0,
-           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            losses INTEGER DEFAULT 0,
+            win_streak INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
@@ -254,7 +254,7 @@ def init_db():
         )
     ''')
 
-   cursor.execute('''
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS tournaments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
