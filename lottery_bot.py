@@ -1068,7 +1068,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
     await bot.send_dice(user_id, emoji=dice_emoji)
     await asyncio.sleep(4)
 
-   bet_config = BET_TYPES[game_id][bet_type]
+    bet_config = BET_TYPES[game_id][bet_type]
     is_win = bet_config['check'](result_value)
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
