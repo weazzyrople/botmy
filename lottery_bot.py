@@ -1343,8 +1343,9 @@ async def menu_play(message: types.Message, state: FSMContext):
     await message.answer("<b>🎮 Выбери игру:</b>", reply_markup=games_keyboard())
 
 
-@dp.message(F.text.in_(["👤 Мой профиль", "👤 Профиль"]))
+@dp.message(F.text == "👤 Профиль")
 async def menu_profile(message: types.Message):
+    logger.info(f"Профиль запрошен пользователем {message.from_user.id}")
     user_id = message.from_user.id
     stats = get_user_stats(user_id)
     if not stats:
@@ -1359,12 +1360,14 @@ async def menu_profile(message: types.Message):
     games_played = stats[9]
     wins = stats[10]
     losses = stats[11]
-    win_rate = (wins / games_played * 100) if games_played > 0 else 0
     win_streak = stats[12]
+    
+    win_rate = (wins / games_played * 100) if games_played > 0 else 0
+    profit = total_won - total_lost
+    
     streak_emoji = get_streak_emoji(win_streak)
     bonus_mult = get_streak_bonus_multiplier(win_streak)
     bonus_text = f" → +{bonus_mult*100:.1f}% к прибыли" if win_streak >= 3 else ""
-    profit = total_won - total_lost
 
     vip_level = get_vip_level(total_deposited)
     vip_name = VIP_LEVELS[vip_level]['name']
@@ -1384,10 +1387,9 @@ async def menu_profile(message: types.Message):
         f"🎮 <b>Игр сыграно:</b> {games_played}\n"
         f"✔️ <b>Побед:</b> {wins}\n"
         f"✖️ <b>Поражений:</b> {losses}\n"
-      f"📈 <b>Винрейт:</b> {win_rate:.1f}%\n\n"
-      f"🔥 <b>Серия побед:</b> {win_streak} {streak_emoji}{bonus_text}"
+        f"📈 <b>Винрейт:</b> {win_rate:.1f}%\n\n"
+        f"🔥 <b>Серия побед:</b> {win_streak} {streak_emoji}{bonus_text}"
     )
-
 
 @dp.message(F.text == "➕ Пополнить")
 async def menu_deposit(message: types.Message, state: FSMContext):
@@ -1486,6 +1488,8 @@ async def coin_amount_entered(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.in_(["coin_heads", "coin_tails"]))
 async def coin_flip(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()  
+    
     user_id = callback.from_user.id
     data = await state.get_data()
     amount = data.get('coin_amount')
@@ -1601,9 +1605,7 @@ async def coin_flip(callback: types.CallbackQuery, state: FSMContext):
             f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>")
 
     await state.clear()
-    await callback.answer()
-
-
+   
 
 
 @dp.callback_query(F.data == "back_main")
