@@ -1525,83 +1525,84 @@ async def coin_flip(callback: types.CallbackQuery, state: FSMContext):
         [InlineKeyboardButton(text="🎰 Сделать ставку", url="https://t.me/ffortunna_bot")]
     ])
 
-if is_win:
-    base_payout = amount * 1.9
-    net_profit = base_payout - amount
-    
-    conn = sqlite3.connect('lottery_bot.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT win_streak FROM users WHERE user_id = ?', (user_id,))
-    current_streak = cursor.fetchone()[0]
-    new_streak = current_streak + 1
-    
-    bonus_multiplier = get_streak_bonus_multiplier(new_streak)
-    bonus_amount = net_profit * bonus_multiplier
-    total_profit = net_profit + bonus_amount
-    
-    cursor.execute('''UPDATE users SET 
-        balance = balance + ?,
-        total_wagered = total_wagered + ?,
-        total_won = total_won + ?, 
-        games_played = games_played + 1, 
-        wins = wins + 1,
-        win_streak = ?
-        WHERE user_id = ?''', (total_profit, amount, base_payout + bonus_amount, new_streak, user_id))
-    conn.commit()
-    conn.close()
-    
-    streak_emoji = get_streak_emoji(new_streak)
-    streak_text = ""
-    if new_streak >= 3:
-        streak_text = f"\n🔥 <b>БОНУС x{new_streak}!</b>\n💰 Базовая: {net_profit:.2f} USDT\n🎁 Бонус (+{bonus_multiplier*100:.1f}%): +{bonus_amount:.2f} USDT"
-    
-    await bot.send_message(STATS_CHANNEL_ID,
-        f"🎉 <b>ПОБЕДА!</b> {streak_emoji}\n\n🪙 Монетка: {result_name}\n"
-        f"💰 Ставка: {amount:.2f} USDT{streak_text}\n"
-        f"💎 <b>ИТОГО: +{total_profit:.2f} USDT</b>\n👤 {first_name}",
-        reply_markup=kb)
-    
-    profit_text = f"💵 Прибыль: +{net_profit:.2f} USDT" if new_streak < 3 else f"💰 Базовая: +{net_profit:.2f} USDT\n🎁 Бонус: +{bonus_amount:.2f} USDT"
-    
-    await bot.send_message(user_id,
-        f"🎉 <b>ПОБЕДА!</b> {streak_emoji}\n\n🪙 Выпало: {result_name}\n"
-        f"{profit_text}\n"
-        f"💎 <b>ИТОГО: +{total_profit:.2f} USDT</b>\n\n"
-        f"🔥 Серия побед: {new_streak}\n"
-        f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>")
-else:
-    update_balance(user_id, -amount)
-    conn = sqlite3.connect('lottery_bot.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT win_streak FROM users WHERE user_id = ?', (user_id,))
-    old_streak = cursor.fetchone()[0]
-    
-    cursor.execute('''UPDATE users SET 
-        total_wagered = total_wagered + ?,
-        total_lost = total_lost + ?, 
-        games_played = games_played + 1, 
-        losses = losses + 1,
-        win_streak = 0
-        WHERE user_id = ?''', (amount, amount, user_id))
-    conn.commit()
-    conn.close()
-    
-    streak_lost = ""
-    if old_streak >= 3:
-        streak_emoji = get_streak_emoji(old_streak)
-        streak_lost = f"\n💔 Стрик прерван! {streak_emoji} (было {old_streak})"
-    
-    await bot.send_message(STATS_CHANNEL_ID,
-        f"😔 <b>Проигрыш</b>\n\n🪙 Монетка: {result_name}\n"
-        f"💰 Потеря: {amount:.2f} USDT{streak_lost}\n👤 {first_name}", reply_markup=kb)
-    
-    await bot.send_message(user_id,
-        f"😔 <b>Проигрыш</b>\n\n🪙 Выпало: {result_name}\n"
-        f"❌ Потеря: <b>-{amount:.2f} USDT</b>{streak_lost}\n"
-        f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>")
+    if is_win:
+        base_payout = amount * 1.9
+        net_profit = base_payout - amount
+        
+        conn = sqlite3.connect('lottery_bot.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT win_streak FROM users WHERE user_id = ?', (user_id,))
+        current_streak = cursor.fetchone()[0]
+        new_streak = current_streak + 1
+        
+        bonus_multiplier = get_streak_bonus_multiplier(new_streak)
+        bonus_amount = net_profit * bonus_multiplier
+        total_profit = net_profit + bonus_amount
+        
+        cursor.execute('''UPDATE users SET 
+            balance = balance + ?,
+            total_wagered = total_wagered + ?,
+            total_won = total_won + ?, 
+            games_played = games_played + 1, 
+            wins = wins + 1,
+            win_streak = ?
+            WHERE user_id = ?''', (total_profit, amount, base_payout + bonus_amount, new_streak, user_id))
+        conn.commit()
+        conn.close()
+        
+        streak_emoji = get_streak_emoji(new_streak)
+        streak_text = ""
+        if new_streak >= 3:
+            streak_text = f"\n🔥 <b>БОНУС x{new_streak}!</b>\n💰 Базовая: {net_profit:.2f} USDT\n🎁 Бонус (+{bonus_multiplier*100:.1f}%): +{bonus_amount:.2f} USDT"
+        
+        await bot.send_message(STATS_CHANNEL_ID,
+            f"🎉 <b>ПОБЕДА!</b> {streak_emoji}\n\n🪙 Монетка: {result_name}\n"
+            f"💰 Ставка: {amount:.2f} USDT{streak_text}\n"
+            f"💎 <b>ИТОГО: +{total_profit:.2f} USDT</b>\n👤 {first_name}",
+            reply_markup=kb)
+        
+        profit_text = f"💵 Прибыль: +{net_profit:.2f} USDT" if new_streak < 3 else f"💰 Базовая: +{net_profit:.2f} USDT\n🎁 Бонус: +{bonus_amount:.2f} USDT"
+        
+        await bot.send_message(user_id,
+            f"🎉 <b>ПОБЕДА!</b> {streak_emoji}\n\n🪙 Выпало: {result_name}\n"
+            f"{profit_text}\n"
+            f"💎 <b>ИТОГО: +{total_profit:.2f} USDT</b>\n\n"
+            f"🔥 Серия побед: {new_streak}\n"
+            f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>")
+    else:
+        update_balance(user_id, -amount)
+        conn = sqlite3.connect('lottery_bot.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT win_streak FROM users WHERE user_id = ?', (user_id,))
+        old_streak = cursor.fetchone()[0]
+        
+        cursor.execute('''UPDATE users SET 
+            total_wagered = total_wagered + ?,
+            total_lost = total_lost + ?, 
+            games_played = games_played + 1, 
+            losses = losses + 1,
+            win_streak = 0
+            WHERE user_id = ?''', (amount, amount, user_id))
+        conn.commit()
+        conn.close()
+        
+        streak_lost = ""
+        if old_streak >= 3:
+            streak_emoji = get_streak_emoji(old_streak)
+            streak_lost = f"\n💔 Стрик прерван! {streak_emoji} (было {old_streak})"
+        
+        await bot.send_message(STATS_CHANNEL_ID,
+            f"😔 <b>Проигрыш</b>\n\n🪙 Монетка: {result_name}\n"
+            f"💰 Потеря: {amount:.2f} USDT{streak_lost}\n👤 {first_name}", reply_markup=kb)
+        
+        await bot.send_message(user_id,
+            f"😔 <b>Проигрыш</b>\n\n🪙 Выпало: {result_name}\n"
+            f"❌ Потеря: <b>-{amount:.2f} USDT</b>{streak_lost}\n"
+            f"💵 Баланс: <b>{get_balance(user_id):.2f} USDT</b>")
 
     await state.clear()
     await callback.answer()
+
 
 
 
