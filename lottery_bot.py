@@ -1087,7 +1087,7 @@ async def process_game(message: types.Message, user_id: int, game_id: str, bet_t
         streak = result['streak']
         bonus_multiplier = result['bonus_multiplier']
         
-        # Формируем текст о стрике
+     
         streak_emoji = get_streak_emoji(streak)
         streak_text = ""
         if streak >= 3:
@@ -1343,7 +1343,7 @@ async def menu_play(message: types.Message, state: FSMContext):
     await message.answer("<b>🎮 Выбери игру:</b>", reply_markup=games_keyboard())
 
 
-@dp.message(F.text == "👤 Профиль")
+@dp.message(F.text == "👤 Мой профиль")
 async def menu_profile(message: types.Message):
     logger.info(f"Профиль запрошен пользователем {message.from_user.id}")
     user_id = message.from_user.id
