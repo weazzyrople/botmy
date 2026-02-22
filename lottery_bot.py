@@ -614,7 +614,7 @@ def admin_keyboard():
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🏆 Топ игроков")],
-        [KeyboardButton(text="👤 Мой профиль"), KeyboardButton(text="⚙️ Админ панель")],
+        [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="⚙️ Админ панель")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -625,7 +625,7 @@ def main_keyboard():
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🏆 Топ игроков")],
-        [KeyboardButton(text="👤 Мой профиль")],
+        [KeyboardButton(text="👤Профиль")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
