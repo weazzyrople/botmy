@@ -1466,12 +1466,15 @@ async def menu_admin(message: types.Message):
 
 @dp.message(BetStates.coin_entering_amount)
 async def coin_amount_entered(message: types.Message, state: FSMContext):
+    print(f"!!! ВВОД СУММЫ МОНЕТКИ !!! Текст: '{message.text}'")
     try:
         amount = float(message.text.replace(',', '.'))
+        print(f"!!! СУММА ОБРАБОТАНА: {amount} !!!")
         if amount < 1:
             await message.answer("❌ Минимум 1 USDT")
             return
         balance = get_balance(message.from_user.id)
+        print(f"!!! БАЛАНС ПОЛЬЗОВАТЕЛЯ: {balance} !!!")
         if balance < amount:
             await message.answer(
                 f"❌ Недостаточно средств!\n\nБаланс: {balance:.2f} USDT\nНужно: {amount:.2f} USDT\n\n"
