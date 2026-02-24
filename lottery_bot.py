@@ -1636,6 +1636,10 @@ async def back_to_admin_panel(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("game_"))
 async def select_game(callback: types.CallbackQuery, state: FSMContext):
     game_id = callback.data.split("_")[1]
+    
+    if game_id == "coin":
+        return
+    
     await state.update_data(game_id=game_id)
     await state.set_state(BetStates.choosing_bet_type)
     game_name = GAMES[game_id]['name']
