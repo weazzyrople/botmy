@@ -625,7 +625,7 @@ def main_keyboard():
         [KeyboardButton(text="➕ Пополнить"), KeyboardButton(text="💸 Вывод")],
         [KeyboardButton(text="🎁 Промокод"), KeyboardButton(text="👥 Рефералы")],
         [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🏆 Топ игроков")],
-        [KeyboardButton(text="👤 Мой профиль")], 
+        [KeyboardButton(text="👤 Профиль")], 
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -1343,10 +1343,9 @@ async def menu_play(message: types.Message, state: FSMContext):
     await message.answer("<b>🎮 Выбери игру:</b>", reply_markup=games_keyboard())
 
 
-@dp.message(F.text.in_(["👤 Мой профиль", "👤 Профиль", "👤  Мой профиль"]))
+@dp.message(F.text == "👤 Профиль")
 async def menu_profile(message: types.Message):
-    print(f"!!! ПРОФИЛЬ ВЫЗВАН !!! Текст кнопки: '{message.text}'")
-    logger.info(f"Профиль запрошен пользователем {message.from_user.id}")
+    print(f"!!! ПРОФИЛЬ ВЫЗВАН !!! Текст: '{message.text}'")
     user_id = message.from_user.id
     stats = get_user_stats(user_id)
     if not stats:
