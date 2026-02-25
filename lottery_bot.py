@@ -1638,6 +1638,7 @@ async def select_game(callback: types.CallbackQuery, state: FSMContext):
     game_id = callback.data.split("_")[1]
     
     if game_id == "coin":
+        await callback.answer() 
         return
     
     await state.update_data(game_id=game_id)
