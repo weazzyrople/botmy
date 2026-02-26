@@ -1347,11 +1347,23 @@ async def menu_play(message: types.Message, state: FSMContext):
 async def menu_profile(message: types.Message):
     print(f"!!! ПРОФИЛЬ ВЫЗВАН !!! Текст: '{message.text}'")
     user_id = message.from_user.id
-    stats = get_user_stats(user_id)
+    
+    
+    conn = sqlite3.connect('lottery_bot.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT user_id, username, first_name, balance, total_deposited, total_withdrawn,
+               total_wagered, total_won, total_lost, games_played, wins, losses, win_streak
+        FROM users WHERE user_id = ?
+    ''', (user_id,))
+    stats = cursor.fetchone()
+    conn.close()
+    
     if not stats:
         await message.answer("❌ Ошибка получения профиля!")
         return
 
+   
     balance = float(stats[3])
     total_deposited = float(stats[4])
     total_wagered = float(stats[6])
@@ -1360,7 +1372,7 @@ async def menu_profile(message: types.Message):
     games_played = int(stats[9])
     wins = int(stats[10])
     losses = int(stats[11])
-    win_streak = int(stats[12])  # ← ВОТ ИСПРАВЛЕНИЕ!
+    win_streak = int(stats[12])
     
     win_rate = (wins / games_played * 100) if games_played > 0 else 0
     profit = total_won - total_lost
@@ -1390,18 +1402,6 @@ async def menu_profile(message: types.Message):
         f"📈 <b>Винрейт:</b> {win_rate:.1f}%\n\n"
         f"🔥 <b>Серия побед:</b> {win_streak} {streak_emoji}{bonus_text}"
     )
-
-@dp.message(F.text == "➕ Пополнить")
-async def menu_deposit(message: types.Message, state: FSMContext):
-    await state.clear()
-    await state.update_data(is_deposit_only=True)
-    await state.set_state(BetStates.entering_custom_amount)
-    await message.answer(
-        "<b>➕ Пополнение баланса</b>\n\n"
-        "💰 <b>Введите сумму пополнения (от 1 USDT):</b>\n\n"
-        "<i>Примеры: 1 или 5 или 10 или 25</i>"
-    )
-
 
 @dp.message(F.text == "💸 Вывод")
 async def menu_withdraw(message: types.Message):
