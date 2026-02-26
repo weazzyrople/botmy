@@ -1633,31 +1633,34 @@ async def back_to_admin_panel(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("game_"))
-async def select_game(callback: types.CallbackQuery, state: FSMContext):
-    game_id = callback.data.split("_")[1]
-    
-    if game_id == "coin":
-        await callback.answer() 
-        return
-    
-    await state.update_data(game_id=game_id)
-    await state.set_state(BetStates.choosing_bet_type)
-    game_name = GAMES[game_id]['name']
-    await callback.message.edit_text(
-        f"<b>🎮 {game_name}</b>\n\nВыбери тип ставки:",
-        reply_markup=bet_types_keyboard(game_id)
-    )
-    await callback.answer()
-
 @dp.callback_query(F.data == "game_coin")
 async def select_coin_game(callback: types.CallbackQuery, state: FSMContext):
+    print("========== МОНЕТКА SELECT_COIN_GAME ==========")
     await state.set_state(BetStates.coin_entering_amount)
     await callback.message.edit_text(
         "<b>🪙 МОНЕТКА</b>\n\n"
         "Орёл или решка?\n"
         "💰 Коэффициент: x1.9\n\n"
         "Введи сумму ставки (от 1 USDT):"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("game_"))
+async def select_game(callback: types.CallbackQuery, state: FSMContext):
+    print(f"========== SELECT_GAME: {callback.data} ==========")
+    game_id = callback.data.split("_")[1]
+    
+    if game_id == "coin":
+        print("Это монетка - игнорируем")
+        return
+    
+    print(f"Обычная игра: {game_id}")
+    await state.update_data(game_id=game_id)
+    await state.set_state(BetStates.choosing_bet_type)
+    game_name = GAMES[game_id]['name']
+    await callback.message.edit_text(
+        f"<b>🎮 {game_name}</b>\n\nВыбери тип ставки:",
+        reply_markup=bet_types_keyboard(game_id)
     )
     await callback.answer()
     
