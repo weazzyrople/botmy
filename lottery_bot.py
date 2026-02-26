@@ -35,6 +35,11 @@ def ensure_watchfiles():
             print("❌ Не удалось установить watchfiles")
             return False
 
+
+if '--no-reload' not in sys.argv and __name__ == '__main__':
+    if '--reload' not in sys.argv:
+        sys.argv.append('--reload')
+    
 if '--reload' in sys.argv and __name__ == '__main__':
     if ensure_watchfiles():
         print("🔥 Запуск в режиме Hot Reload...")
@@ -2655,7 +2660,7 @@ async def cmd_ton_price(message: types.Message):
 async def main():
     init_db()
     create_weekend_tournament()
-    logger.info("🚀 Бот запущен!")
+    logger.info("🚀🚀🚀 Бот запущен С АВТОПЕРЕЗАГРУЗКОЙ! 🔥")
     await dp.start_polling(bot)
 
 
