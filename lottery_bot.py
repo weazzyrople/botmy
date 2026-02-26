@@ -32,17 +32,48 @@ def ensure_watchfiles():
         try:
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", "watchfiles"],
-                stdout=subprocess.DEVNULL,  # Скрываем вывод pip
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
             print("✅ watchfiles успешно установлен!")
             print("🔄 Перезапускаю бота с Hot Reload...")
-            # Перезапускаем скрипт после установки
             os.execv(sys.executable, [sys.executable] + sys.argv)
         except Exception as e:
             print(f"❌ Ошибка установки: {e}")
-            print("💡 Попробуйте вручную: pip install watchfiles")
             return False
+
+
+if '--reload' in sys.argv and __name__ == '__main__':
+    if ensure_watchfiles():
+        print("🔥 Запуск в режиме Hot Reload...")
+        import subprocess
+        import time
+        
+        def run_bot():
+            args = [arg for arg in sys.argv if arg != '--reload']
+            return subprocess.Popen([sys.executable] + args)
+        
+        last_mtime = os.path.getmtime(__file__)
+        process = run_bot()
+        
+        try:
+            while True:
+                time.sleep(1)
+                current_mtime = os.path.getmtime(__file__)
+                
+                if current_mtime != last_mtime:
+                    print("🔄 Файл изменён! Перезапускаю...")
+                    process.terminate()
+                    process.wait()
+                    last_mtime = current_mtime
+                    process = run_bot()
+        except KeyboardInterrupt:
+            print("\n🛑 Остановка бота...")
+            process.terminate()
+            process.wait()
+        
+        sys.exit(0)
+
 
 load_dotenv()
 
