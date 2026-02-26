@@ -17,6 +17,45 @@ from aiogram.enums import ParseMode, DiceEmoji
 from dotenv import load_dotenv
 from pytonconnect import TonConnect
 import base64
+import os
+import sqlite3
+import asyncio
+import logging
+import requests
+import time
+from datetime import datetime, timedelta
+from typing import Optional
+from aiogram import Bot, Dispatcher, types, F
+import sys
+import subprocess
+
+def ensure_watchfiles():
+    try:
+        import watchfiles
+        return True
+    except ImportError:
+        print("📦 watchfiles не установлен. Устанавливаю...")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "watchfiles"])
+            print("✅ watchfiles установлен!")
+            return True
+        except:
+            print("❌ Не удалось установить watchfiles")
+            return False
+
+
+if '--reload' in sys.argv and __name__ == '__main__':
+    if ensure_watchfiles():
+        print("🔥 Запуск в режиме Hot Reload...")
+        from watchfiles import run_process
+        
+        def start_bot():
+            # Убираем --reload из аргументов
+            args = [arg for arg in sys.argv if arg != '--reload']
+            subprocess.run([sys.executable] + args)
+        
+        run_process('.', target=start_bot, watch_filter=lambda change, path: path.endswith('.py'))
+        sys.exit(0)
 
 load_dotenv()
 
