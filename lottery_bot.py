@@ -2652,7 +2652,7 @@ async def cmd_ton_price(message: types.Message):
 async def main():
     init_db()
     create_weekend_tournament()
-    logger.info("🚀🚀🚀 Бот запущен С АВТОПЕРЕЗАГРУЗКОЙ! 🔥")
+    logger.info("🚀🚀🚀 Бот запущен")
     await dp.start_polling(bot)
 
 
