@@ -2622,4 +2622,31 @@ async def main():
 
 
 if __name__ == '__main__':
+    import sys
+    import os
+    
+   
+    if '--reload' in sys.argv:
+        logger.info("🔥 Hot Reload режим активирован!")
+        logger.info("📝 Изменяй код и сохраняй - бот перезапустится автоматически!")
+        
+        import time
+        import subprocess
+        
+       
+        last_modified = os.path.getmtime(__file__)
+        
+        
+        process = subprocess.Popen([sys.executable, __file__])
+        
+        try:
+            while True:
+                time.sleep(1)  # Проверяем каждую секунду
+                current_modified = os.path.getmtime(__file__)
+                
+                if current_modified != last_modified:
+                    logger.info("♻️ Обнаружен
+
+
+if __name__ == '__main__':
     asyncio.run(main())
