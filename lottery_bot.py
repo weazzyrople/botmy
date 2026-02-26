@@ -4,6 +4,9 @@ import asyncio
 import logging
 import requests
 import time
+import sys
+import subprocess
+import base64
 from datetime import datetime, timedelta
 from typing import Optional
 from aiogram import Bot, Dispatcher, types, F
@@ -16,20 +19,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, DiceEmoji
 from dotenv import load_dotenv
 from pytonconnect import TonConnect
-import base64
-import os
-import sqlite3
-import asyncio
-import logging
-import requests
-import time
-from datetime import datetime, timedelta
-from typing import Optional
-from aiogram import Bot, Dispatcher, types, F
-import sys
-import subprocess
 
 def ensure_watchfiles():
+    """Автоматически устанавливает watchfiles если нужно"""
     try:
         import watchfiles
         return True
@@ -43,14 +35,12 @@ def ensure_watchfiles():
             print("❌ Не удалось установить watchfiles")
             return False
 
-
 if '--reload' in sys.argv and __name__ == '__main__':
     if ensure_watchfiles():
         print("🔥 Запуск в режиме Hot Reload...")
         from watchfiles import run_process
         
         def start_bot():
-            # Убираем --reload из аргументов
             args = [arg for arg in sys.argv if arg != '--reload']
             subprocess.run([sys.executable] + args)
         
@@ -2684,7 +2674,7 @@ if __name__ == '__main__':
                 current_modified = os.path.getmtime(__file__)
                 
                 if current_modified != last_modified:
-                    logger.info("♻️ Обнаружен
+                  logger.info("♻️ Обнаружены изменения! Перезапуск...")
 
 
 if __name__ == '__main__':
