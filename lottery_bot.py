@@ -24,33 +24,25 @@ def ensure_watchfiles():
     """Автоматически устанавливает watchfiles если нужно"""
     try:
         import watchfiles
+        print("✅ watchfiles уже установлен!")
         return True
     except ImportError:
-        print("📦 watchfiles не установлен. Устанавливаю...")
+        print("📦 watchfiles не найден. Устанавливаю автоматически...")
+        print("⏳ Подождите несколько секунд...")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "watchfiles"])
-            print("✅ watchfiles установлен!")
-            return True
-        except:
-            print("❌ Не удалось установить watchfiles")
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", "watchfiles"],
+                stdout=subprocess.DEVNULL,  # Скрываем вывод pip
+                stderr=subprocess.DEVNULL
+            )
+            print("✅ watchfiles успешно установлен!")
+            print("🔄 Перезапускаю бота с Hot Reload...")
+            # Перезапускаем скрипт после установки
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception as e:
+            print(f"❌ Ошибка установки: {e}")
+            print("💡 Попробуйте вручную: pip install watchfiles")
             return False
-
-
-if '--no-reload' not in sys.argv and __name__ == '__main__':
-    if '--reload' not in sys.argv:
-        sys.argv.append('--reload')
-    
-if '--reload' in sys.argv and __name__ == '__main__':
-    if ensure_watchfiles():
-        print("🔥 Запуск в режиме Hot Reload...")
-        from watchfiles import run_process
-        
-        def start_bot():
-            args = [arg for arg in sys.argv if arg != '--reload']
-            subprocess.run([sys.executable] + args)
-        
-        run_process('.', target=start_bot, watch_filter=lambda change, path: path.endswith('.py'))
-        sys.exit(0)
 
 load_dotenv()
 
