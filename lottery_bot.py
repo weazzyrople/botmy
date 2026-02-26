@@ -1377,9 +1377,20 @@ async def menu_profile(message: types.Message):
     print(f"!!! ПРОФИЛЬ ВЫЗВАН !!! Текст: '{message.text}'")
     user_id = message.from_user.id
     
-    
     conn = sqlite3.connect('lottery_bot.db')
     cursor = conn.cursor()
+    
+
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [col[1] for col in cursor.fetchall()]
+    
+    if 'win_streak' not in columns:
+        print("⚠️ Добавляю колонку win_streak в таблицу users...")
+        cursor.execute('ALTER TABLE users ADD COLUMN win_streak INTEGER DEFAULT 0')
+        conn.commit()
+        print("✅ Колонка win_streak добавлена!")
+    
+ 
     cursor.execute('''
         SELECT user_id, username, first_name, balance, total_deposited, total_withdrawn,
                total_wagered, total_won, total_lost, games_played, wins, losses, win_streak
@@ -1392,7 +1403,6 @@ async def menu_profile(message: types.Message):
         await message.answer("❌ Ошибка получения профиля!")
         return
 
-   
     balance = float(stats[3])
     total_deposited = float(stats[4])
     total_wagered = float(stats[6])
@@ -1401,7 +1411,7 @@ async def menu_profile(message: types.Message):
     games_played = int(stats[9])
     wins = int(stats[10])
     losses = int(stats[11])
-    win_streak = int(stats[12])
+    win_streak = int(stats[12]) if stats[12] is not None else 0
     
     win_rate = (wins / games_played * 100) if games_played > 0 else 0
     profit = total_won - total_lost
@@ -1431,7 +1441,6 @@ async def menu_profile(message: types.Message):
         f"📈 <b>Винрейт:</b> {win_rate:.1f}%\n\n"
         f"🔥 <b>Серия побед:</b> {win_streak} {streak_emoji}{bonus_text}"
     )
-
 @dp.message(F.text == "💸 Вывод")
 async def menu_withdraw(message: types.Message):
     await message.answer(
