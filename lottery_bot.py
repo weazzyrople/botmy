@@ -2657,4 +2657,12 @@ async def main():
 
 
 if __name__ == '__main__':
+    if '--reload' not in sys.argv and '--no-reload' not in sys.argv:
+        print("💡 Автоматически включаю Hot Reload...")
+        sys.argv.append('--reload')
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    
+    asyncio.run(main())
+
+if __name__ == '__main__':
     asyncio.run(main())
