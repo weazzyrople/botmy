@@ -2683,17 +2683,43 @@ async def cmd_ton_price(message: types.Message):
 async def main():
     init_db()
     create_weekend_tournament()
-    logger.info("🚀🚀🚀 Бот запущен")
+    logger.info("🚀 Бот запущен!")
     await dp.start_polling(bot)
 
 
 if __name__ == '__main__':
-    if '--reload' not in sys.argv and '--no-reload' not in sys.argv:
-        print("💡 Автоматически включаю Hot Reload...")
-        sys.argv.append('--reload')
-        os.execv(sys.executable, [sys.executable] + sys.argv)
     
-    asyncio.run(main())
-
-if __name__ == '__main__':
-    asyncio.run(main())
+    if len(sys.argv) == 1:  # Если запущен просто python lottery_bot.py
+        try:
+            import watchfiles
+            print("🔥 Hot Reload активирован!")
+            
+            def run_bot():
+                return subprocess.Popen([sys.executable, __file__, '--running'])
+            
+            process = run_bot()
+            last_mtime = os.path.getmtime(__file__)
+            
+            try:
+                while True:
+                    time.sleep(1)
+                    current_mtime = os.path.getmtime(__file__)
+                    
+                    if current_mtime != last_mtime:
+                        print("🔄 Изменения обнаружены! Перезапуск...")
+                        process.terminate()
+                        process.wait()
+                        last_mtime = current_mtime
+                        process = run_bot()
+            except KeyboardInterrupt:
+                print("\n🛑 Остановка...")
+                process.terminate()
+                process.wait()
+        except ImportError:
+            print("📦 Устанавливаю watchfiles...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "watchfiles", "-q"])
+            print("✅ Установлено! Перезапускаю...")
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+    else:
+       
+        asyncio.run(main())
