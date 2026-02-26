@@ -1352,15 +1352,15 @@ async def menu_profile(message: types.Message):
         await message.answer("❌ Ошибка получения профиля!")
         return
 
-    balance = stats[3]
-    total_deposited = stats[4]
-    total_wagered = stats[6]
-    total_won = stats[7]
-    total_lost = stats[8]
-    games_played = stats[9]
-    wins = stats[10]
-    losses = stats[11]
-    win_streak = stats[12]
+    balance = float(stats[3])
+    total_deposited = float(stats[4])
+    total_wagered = float(stats[6])
+    total_won = float(stats[7])
+    total_lost = float(stats[8])
+    games_played = int(stats[9])
+    wins = int(stats[10])
+    losses = int(stats[11])
+    win_streak = int(stats[12])  # ← ВОТ ИСПРАВЛЕНИЕ!
     
     win_rate = (wins / games_played * 100) if games_played > 0 else 0
     profit = total_won - total_lost
@@ -1390,7 +1390,6 @@ async def menu_profile(message: types.Message):
         f"📈 <b>Винрейт:</b> {win_rate:.1f}%\n\n"
         f"🔥 <b>Серия побед:</b> {win_streak} {streak_emoji}{bonus_text}"
     )
-
 
 @dp.message(F.text == "➕ Пополнить")
 async def menu_deposit(message: types.Message, state: FSMContext):
