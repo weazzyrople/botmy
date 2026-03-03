@@ -79,7 +79,7 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-STATS_CHANNEL_ID = -1003867480655
+STATS_CHANNEL_ID = -1003692039981
 WIN_TEMPLATE_MESSAGE_ID = 19
 LOSE_TEMPLATE_MESSAGE_ID = 20
 
