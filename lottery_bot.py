@@ -1557,7 +1557,6 @@ async def coin_amount_entered(message: types.Message, state: FSMContext):
 
 @dp.callback_query(F.data.in_(["coin_heads", "coin_tails"]))
 async def coin_flip(callback: types.CallbackQuery, state: FSMContext):
-    print(f"!!! МОНЕТКА ВЫЗВАНА !!! Callback: {callback.data}")
     await callback.answer()
     
     user_id = callback.from_user.id
@@ -1587,13 +1586,21 @@ async def coin_flip(callback: types.CallbackQuery, state: FSMContext):
     )
 
     await asyncio.sleep(2)
-    dice_msg = await bot.send_dice(STATS_CHANNEL_ID, emoji=DiceEmoji.DICE)
-    dice_value = dice_msg.dice.value
+    
+    
+    await bot.send_dice(STATS_CHANNEL_ID, emoji="🪙")
+    await bot.send_dice(user_id, emoji="🪙")
+    
+    
+    import random
+    coin_result = random.choice([0, 1])  # 0 = орёл, 1 = решка
+    
     await asyncio.sleep(3)
 
-    result = "coin_heads" if dice_value <= 3 else "coin_tails"
+    result = "coin_heads" if coin_result == 0 else "coin_tails"
     result_name = "🦅 Орёл" if result == "coin_heads" else "🎭 Решка"
     is_win = result == user_choice
+
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎰 Сделать ставку", url="https://t.me/ffortunna_bot")]
