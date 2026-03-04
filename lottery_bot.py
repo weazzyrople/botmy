@@ -1477,6 +1477,15 @@ async def menu_withdraw(message: types.Message):
         "Укажите ID и сумму.\n⏱ Обработка: 1-48 часа"
     )
 
+@dp.message(F.text == "➕ Пополнить")
+async def menu_deposit(message: types.Message, state: FSMContext):
+    await state.set_state(BetStates.entering_custom_amount)
+    await state.update_data(is_deposit_only=True)
+    await message.answer(
+        "<b>💰 Пополнение баланса</b>\n\n"
+        "Введите сумму пополнения (от 1 USDT):\n\n"
+        "<i>Примеры: 10, 50, 100</i>"
+    )
 
 @dp.message(F.text == "🎁 Промокод")
 async def menu_promocode(message: types.Message, state: FSMContext):
