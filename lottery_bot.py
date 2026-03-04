@@ -169,7 +169,8 @@ class BetStates(StatesGroup):
     duel_waiting_opponent = State()
     coin_entering_amount = State()
     tournament_entering_amount = State()
-
+    entering_deposit_amount = State() 
+    
 GAMES = {
     'dice':       {'emoji': '🎲', 'name': 'Кубик',     'dice_emoji': DiceEmoji.DICE},
     'basketball': {'emoji': '🏀', 'name': 'Баскетбол', 'dice_emoji': DiceEmoji.BASKETBALL},
@@ -1479,13 +1480,29 @@ async def menu_withdraw(message: types.Message):
 
 @dp.message(F.text == "➕ Пополнить")
 async def menu_deposit(message: types.Message, state: FSMContext):
-    await state.set_state(BetStates.entering_custom_amount)
-    await state.update_data(is_deposit_only=True)
+    await state.set_state(BetStates.entering_deposit_amount) 
     await message.answer(
         "<b>💰 Пополнение баланса</b>\n\n"
         "Введите сумму пополнения (от 1 USDT):\n\n"
         "<i>Примеры: 10, 50, 100</i>"
     )
+
+@dp.message(BetStates.entering_deposit_amount)
+async def process_deposit_amount(message: types.Message, state: FSMContext):
+    try:
+        amount = float(message.text.replace(',', '.'))
+        if amount < 1:
+            await message.answer("❌ Минимальная сумма - 1 USDT")
+            return
+        
+        await message.answer(
+            f"💰 <b>Пополнение на {amount} USDT</b>\n\n"
+            f"Выберите способ оплаты:",
+            reply_markup=payment_method_keyboard(amount, "deposit")
+        )
+        await state.clear()
+    except ValueError:
+        await message.answer("❌ Введите число! Например: 10 или 50")
 
 @dp.message(F.text == "🎁 Промокод")
 async def menu_promocode(message: types.Message, state: FSMContext):
